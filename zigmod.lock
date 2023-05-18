@@ -1,0 +1,7 @@
+2
+git https://github.com/Snektron/vulkan-zig commit-d59005bab69496a8525faa601a56e5127ba0a6b0
+git https://github.com/hexops/mach-glfw commit-1b3def95123bc5b040bb1786f6ef3f551504a6f5
+git https://github.com/kooparse/zalgebra commit-42066eef399369560c4b6660933fc4205efa6012
+git https://github.com/nothings/stb commit-5736b15f7ea0ffb08dd38af21067c314d6a3aae9
+git https://github.com/ziglibs/zlm commit-21c1ec226d3fd244460270f1dfc9ab0eace01926
+git https://github.com/Vulfox/wavefront-obj commit-867cffa4a74f0ee4d659a701ca2777c298591412

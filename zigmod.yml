@@ -1,0 +1,20 @@
+
+name: vulkan-tutorial-zig
+root_dependencies:
+- src: git https://github.com/kooparse/zalgebra
+- src: git https://github.com/Vulfox/wavefront-obj
+  version: branch-stage2
+
+build_dependencies:
+- src: git https://github.com/hexops/mach-glfw
+  main: build.zig
+  name: build_glfw
+- src: git https://github.com/Snektron/vulkan-zig
+  main: generator/index.zig
+  name: vk_gen
+- src: git https://github.com/Snektron/vulkan-zig
+  main: build.zig
+  name: vk_build
+- src: git https://github.com/nothings/stb
+  name: stb
+  main: ''

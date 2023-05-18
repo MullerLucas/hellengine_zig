@@ -12,7 +12,9 @@ pub const HellExtent2D = struct {
 pub const HellWindow = struct {
     const Self = @This();
 
-    window: *c.GLFWwindow,
+    raw: *c.GLFWwindow,
+
+
 
     pub fn init(app_name: [*c]const u8, extent: HellExtent2D) !Self {
         log.info("initializing window '{s}'\n", .{app_name});
@@ -26,7 +28,7 @@ pub const HellWindow = struct {
         }
 
         c.glfwWindowHint(c.GLFW_CLIENT_API, c.GLFW_NO_API);
-        const window = c.glfwCreateWindow(
+        const raw = c.glfwCreateWindow(
             @intCast(c_int, extent.width),
             @intCast(c_int, extent.height),
             app_name,
@@ -35,23 +37,23 @@ pub const HellWindow = struct {
         ) orelse return error.WindowInitFailed;
 
         return Self {
-            .window = window,
+            .raw = raw,
         };
     }
 
     pub fn deinit(self: *Self) void {
         c.glfwTerminate();
-        c.glfwDestroyWindow(self.window);
+        c.glfwDestroyWindow(self.raw);
     }
 
     pub fn shouldClose(self: *Self) bool {
-        return c.glfwWindowShouldClose(self.window) == c.GLFW_TRUE;
+        return c.glfwWindowShouldClose(self.raw) == c.GLFW_TRUE;
     }
 
     pub fn getExtent(self: *Self) HellExtent2D {
         var w: c_int = undefined;
         var h: c_int = undefined;
-        c.glfwGetWindowSize(self.window, &w, &h);
+        c.glfwGetWindowSize(self.raw, &w, &h);
 
         return HellExtent2D {
             .width  = @intCast(u32, w),
