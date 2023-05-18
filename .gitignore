@@ -1,0 +1,6 @@
+# zig
+.zigmod
+zig-cache
+zig-out
+
+lib
