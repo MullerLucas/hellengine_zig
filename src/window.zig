@@ -1,6 +1,7 @@
 const std = @import("std");
 const c = @import("c.zig");
 const vk = @import("vk");
+const log = @import("log.zig").scoped(.window);
 
 
 pub const HellExtent2D = struct {
@@ -14,6 +15,9 @@ pub const HellWindow = struct {
     window: *c.GLFWwindow,
 
     pub fn init(app_name: [*c]const u8, extent: HellExtent2D) !Self {
+        log.info("initializing window '{s}'\n", .{app_name});
+
+
         if (c.glfwInit() != c.GLFW_TRUE) return error.GlfwInitFailed;
 
         if (c.glfwVulkanSupported() != c.GLFW_TRUE) {

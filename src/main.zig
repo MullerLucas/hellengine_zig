@@ -10,6 +10,8 @@ const Vertex = math.Vertex;
 const win = @import("window.zig");
 const HellWindow = win.HellWindow;
 
+const log = @import("log.zig").scoped(.hell);
+
 
 const app_name = "vulkan-zig triangle example";
 
@@ -29,9 +31,14 @@ pub fn main() !void {
     }) catch return error.WindowInitFailed;
     defer window.deinit();
 
-    while (!window.shouldClose()) {
-        const ext = window.getExtent();
-        _ = ext;
-        window.pollEvents();
-    }
+    log.debug("debug test\n", .{});
+    log.info("info test\n", .{});
+    log.warn("warn test\n", .{});
+    log.err("err test\n", .{});
+
+    // while (!window.shouldClose()) {
+    //     const ext = window.getExtent();
+    //     _ = ext;
+    //     window.pollEvents();
+    // }
 }
