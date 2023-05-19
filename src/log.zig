@@ -1,29 +1,32 @@
 const std = @import("std");
 
 
-const ANSI_FG_BLACK   = "\x1b[30m";
-const ANSI_FG_RED     = "\x1b[31m";
-const ANSI_FG_GREEN   = "\x1b[32m";
-const ANSI_FG_YELLOW  = "\x1b[33m";
-const ANSI_FG_BLUE    = "\x1b[34m";
-const ANSI_FG_MAGENTA = "\x1b[35m";
-const ANSI_FG_CYAN    = "\x1b[36m";
-const ANSI_FG_WHITE   = "\x1b[37m";
-const ANSI_FG_DEFAULT = "\x1b[39m";
+pub const AnsiColor8 = enum(u8) {
+    black = 0,
+    red = 1,
+    green = 2,
+    yellow = 3,
+    blue = 4,
+    magenta = 5,
+    cyan = 6,
+    white = 7,
+    default = 9,
 
-const ANSI_BG_BLACK   = "\x1b[40m";
-const ANSI_BG_RED     = "\x1b[41m";
-const ANSI_BG_GREEN   = "\x1b[42m";
-const ANSI_BG_YELLOW  = "\x1b[43m";
-const ANSI_BG_BLUE    = "\x1b[44m";
-const ANSI_BG_MAGENTA = "\x1b[45m";
-const ANSI_BG_CYAN    = "\x1b[46m";
-const ANSI_BG_WHITE   = "\x1b[47m";
-const ANSI_BG_DEFAULT = "\x1b[49m";
+    fn asFgStr(comptime self: AnsiColor8) []const u8 {
+        return std.fmt.comptimePrint("\x1b[3{}m", .{ @enumToInt(self) });
+    }
+
+    fn asBgStr(comptime self: AnsiColor8) []const u8 {
+        return std.fmt.comptimePrint("\x1b[4{}m", .{ @enumToInt(self) });
+    }
+};
+
+const ANSI_256_FG_RED = "\x1b[38;5;196m";
 
 
 
-const LogLevel = enum {
+
+pub const LogLevel = enum {
     debug,
     info,
     warn,
@@ -38,68 +41,63 @@ const LogLevel = enum {
         };
     }
 
-    pub fn asFgColor(comptime self: LogLevel) []const u8 {
+    pub fn asColor(comptime self: LogLevel) AnsiColor8 {
         return switch (self) {
-            .debug => ANSI_FG_BLUE,
-            .info  => ANSI_FG_GREEN,
-            .warn  => ANSI_FG_YELLOW,
-            .err   => ANSI_FG_RED,
-        };
-    }
-
-    pub fn asBgColor(comptime self: LogLevel) []const u8 {
-        return switch (self) {
-            .debug => ANSI_BG_BLUE,
-            .info  => ANSI_BG_GREEN,
-            .warn  => ANSI_BG_YELLOW,
-            .err   => ANSI_BG_RED,
+            .debug => AnsiColor8.blue,
+            .info  => AnsiColor8.green,
+            .warn  => AnsiColor8.yellow,
+            .err   => AnsiColor8.red,
         };
     }
 };
 
 
-fn log(
-    comptime level: LogLevel,
-    comptime scope: @TypeOf(.EnumLiteral),
-    comptime format: []const u8,
-    args: anytype
-) void {
-    const color_set_txt   = comptime level.asFgColor();
-    const color_reset_txt = ANSI_FG_DEFAULT;
-    const scope_txt = "(" ++ @tagName(scope) ++ ")";
-    const level_txt = "[" ++ comptime level.asText() ++ "]";
-
-    std.debug.getStderrMutex().lock();
-    defer std.debug.getStderrMutex().unlock();
-    const stderr = std.io.getStdErr().writer();
-
-    nosuspend stderr.print(
-        color_set_txt ++ level_txt ++ scope_txt ++ ": " ++ format ++ color_reset_txt,
-        args
-    ) catch return;
-}
-
 pub fn scoped(comptime scope: @TypeOf(.EnumLiteral)) type {
     return struct {
+        const Self = @This();
+
+        pub fn log(
+            comptime level: LogLevel,
+            comptime format: []const u8,
+            args: anytype
+        ) void {
+            const scope_txt = "(" ++ @tagName(scope) ++ ")";
+            const level_txt = "[" ++ comptime level.asText() ++ "]";
+
+            std.debug.getStderrMutex().lock();
+            defer std.debug.getStderrMutex().unlock();
+            const stderr = std.io.getStdErr().writer();
+
+            nosuspend stderr.print(
+                comptime level.asColor().asFgStr() ++
+                level_txt ++
+                AnsiColor8.default.asBgStr() ++
+                scope_txt ++
+                ": " ++
+                format,
+                args
+            ) catch return;
+        }
+
         /// Log an error message.
         pub fn err(comptime format: []const u8, args: anytype) void {
             @setCold(true);
-            log(.err, scope, format, args);
+            Self.log(.err, format, args);
         }
 
         /// Log an warning message.
         pub fn warn(comptime format: []const u8, args: anytype) void {
-            log(.warn, scope, format, args);
+            Self.log(.warn, format, args);
         }
 
         /// Log an info message.
         pub fn info(comptime format: []const u8, args: anytype) void {
-            log(.info, scope, format, args);
+            Self.log(.info, format, args);
         }
 
         /// Log an debug message.
         pub fn debug(comptime format: []const u8, args: anytype) void {
-            log(.debug, scope, format, args);
+            Self.log(.debug, format, args);
         }
     };
 }

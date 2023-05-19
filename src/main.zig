@@ -6,11 +6,14 @@ const glfw = @import("glfw");
 const vk = @import("vulkan");
 const za = @import("zalgebra");
 const resources = @import("resources");
+const log = @import("log.zig");
+const logger = log.scoped(.hell);
 
 const c = @cImport({
     @cInclude("stb_image.h");
 });
 
+const APP_NAME = "hell-app";
 const WIDTH: u32 = 800;
 const HEIGHT: u32 = 600;
 
@@ -24,6 +27,7 @@ const enable_validation_layers: bool = switch (builtin.mode) {
     .Debug, .ReleaseSafe => true,
     else => false,
 };
+
 
 const BaseDispatch = vk.BaseWrapper(.{
     .createInstance = true,
@@ -285,7 +289,7 @@ const HelloTriangleApplication = struct {
             @panic("failed to initialize GLFW");
         }
 
-        self.window = glfw.Window.create(WIDTH, HEIGHT, "Vulkan", null, null, .{
+        self.window = glfw.Window.create(WIDTH, HEIGHT, APP_NAME, null, null, .{
             .client_api = .no_api,
         });
         self.window.?.setUserPointer(self);
@@ -1665,9 +1669,18 @@ const HelloTriangleApplication = struct {
         return true;
     }
 
-    fn debugCallback(_: vk.DebugUtilsMessageSeverityFlagsEXT, _: vk.DebugUtilsMessageTypeFlagsEXT, p_callback_data: ?*const vk.DebugUtilsMessengerCallbackDataEXT, _: ?*anyopaque) callconv(vk.vulkan_call_conv) vk.Bool32 {
+    fn debugCallback(severity: vk.DebugUtilsMessageSeverityFlagsEXT, _: vk.DebugUtilsMessageTypeFlagsEXT, p_callback_data: ?*const vk.DebugUtilsMessengerCallbackDataEXT, _: ?*anyopaque) callconv(vk.vulkan_call_conv) vk.Bool32 {
+        _ = severity;
         if (p_callback_data != null) {
-            std.log.debug("validation layer: {s}", .{p_callback_data.?.p_message});
+            // const log_level = switch (severity) {
+            //     .verbose_bit_ext => log.LogLevel.debug,
+            //     .info_bit_ext    => log.LogLevel.info,
+            //     .warning_bit_ext => log.LogLevel.warn,
+            //     .error_bit_ext   => log.LogLevel.err,
+            // };
+            //
+            // log.log(log_level, "validation layer: {s}", .{p_callback_data.message});
+            logger.debug("validation layer: {s}\n", .{p_callback_data.?.p_message});
         }
 
         return vk.FALSE;
