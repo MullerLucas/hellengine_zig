@@ -1,67 +1,67 @@
-const std = @import("std");
-const c = @import("c.zig");
-const vk = @import("vk");
-const log = @import("log.zig").scoped(.window);
+const glfw = @import("glfw");
+const vk = @import("vulkan");
+// const c = @import("c.zig");
 
+pub const VKProc = *const fn () callconv(.C) void;
 
-pub const HellExtent2D = struct {
-    width: u32,
-    height: u32,
-};
-
-pub const HellWindow = struct {
+pub const GlfwWindow = struct {
     const Self = @This();
 
-    raw: *c.GLFWwindow,
+    window: ?glfw.Window = null,
+    framebuffer_resized: bool = false,
 
-
-
-    pub fn init(app_name: [*c]const u8, extent: HellExtent2D) !Self {
-        log.info("initializing window '{s}'\n", .{app_name});
-
-
-        if (c.glfwInit() != c.GLFW_TRUE) return error.GlfwInitFailed;
-
-        if (c.glfwVulkanSupported() != c.GLFW_TRUE) {
-            std.log.err("GLFW could not find libvulkan", .{});
-            return error.NoVulkan;
+    pub fn init(width: u32, height: u32, app_name: [*:0]const u8) !Self {
+        if(!glfw.init(.{})) {
+            @panic("failed to initialize GLFW");
         }
 
-        c.glfwWindowHint(c.GLFW_CLIENT_API, c.GLFW_NO_API);
-        const raw = c.glfwCreateWindow(
-            @intCast(c_int, extent.width),
-            @intCast(c_int, extent.height),
-            app_name,
-            null,
-            null,
-        ) orelse return error.WindowInitFailed;
+        var result = Self{};
 
-        return Self {
-            .raw = raw,
-        };
+        result.window = glfw.Window.create(width, height, app_name, null, null, .{
+            .client_api = .no_api,
+        });
+        result.window.?.setUserPointer(&result);
+        result.window.?.setFramebufferSizeCallback(framebufferResizeCallback);
+
+        return result;
     }
 
     pub fn deinit(self: *Self) void {
-        c.glfwTerminate();
-        c.glfwDestroyWindow(self.raw);
+        self.window.?.destroy();
+        glfw.terminate();
+    }
+
+    pub fn getInstanceProcAddress(vk_instance: ?*anyopaque, proc_name: [*:0]const u8) callconv(.C) ?VKProc {
+        return glfw.getInstanceProcAddress(vk_instance, proc_name);
     }
 
     pub fn shouldClose(self: *Self) bool {
-        return c.glfwWindowShouldClose(self.raw) == c.GLFW_TRUE;
+        return self.window.?.shouldClose();
     }
 
-    pub fn getExtent(self: *Self) HellExtent2D {
-        var w: c_int = undefined;
-        var h: c_int = undefined;
-        c.glfwGetWindowSize(self.raw, &w, &h);
-
-        return HellExtent2D {
-            .width  = @intCast(u32, w),
-            .height = @intCast(u32, w),
-        };
+    pub fn pollEvents() void {
+        glfw.pollEvents();
     }
 
-    pub fn pollEvents(_: *Self) void {
-        c.glfwPollEvents();
+    pub fn waitEvents() void {
+        glfw.waitEvents();
+    }
+
+    pub fn getFramebufferSize(self: *Self) glfw.Window.Size {
+        return glfw.Window.getFramebufferSize(self.window.?);
+    }
+
+    pub fn createWindowSurface(self: *Self, instance: vk.Instance, surface: *vk.SurfaceKHR) i32 {
+        return glfw.createWindowSurface(instance, self.window.?, null, surface);
+    }
+    pub fn getRequiredInstanceExtensions() ?[][*:0]const u8 {
+        return glfw.getRequiredInstanceExtensions();
     }
 };
+
+fn framebufferResizeCallback(window: glfw.Window, _: u32, _: u32) void {
+    var self = window.getUserPointer(GlfwWindow);
+    if (self != null) {
+        self.?.framebuffer_resized = true;
+    }
+}
