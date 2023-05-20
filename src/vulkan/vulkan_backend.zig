@@ -6,17 +6,19 @@ const za = @import("zalgebra");
 const resources = @import("resources");
 const log = @import("../core/log.zig");
 const Logger = log.scoped(.hell);
-const GlfwWindow = @import("../glfw_window.zig");
+const GlfwWindow = @import("../GlfwWindow.zig");
 const InstanceDispatch = @import("dispatch.zig").InstanceDispatch;
 const BaseDispatch = @import("dispatch.zig").BaseDispatch;
 const DeviceDispatch = @import("dispatch.zig").DeviceDispatch;
 const config = @import("vulkan_config.zig");
+const render_types = @import("../render/render_types.zig");
+const mesh = @import("../render/mesh.zig");
+const Mesh = mesh.Mesh;
+const quad = Mesh.quad();
 
 const c = @cImport({
     @cInclude("stb_image.h");
 });
-
-
 
 const APP_NAME = "hell-app";
 const WIDTH: u32 = 800;
@@ -50,67 +52,6 @@ pub const SwapChainSupportDetails = struct {
         if (self.present_modes != null) self.allocator.free(self.present_modes.?);
     }
 };
-
-pub const Vertex = struct {
-    pos: [3]f32 = .{ 0, 0, 0 },
-    color: [3]f32 = .{ 0, 0, 0 },
-    tex_coord: [2]f32 = .{ 0, 0 },
-
-    pub fn getBindingDescription() vk.VertexInputBindingDescription {
-        return vk.VertexInputBindingDescription{
-            .binding = 0,
-            .stride = @sizeOf(Vertex),
-            .input_rate = .vertex,
-        };
-    }
-
-    pub fn getAttributeDescriptions() [3]vk.VertexInputAttributeDescription {
-        return [_]vk.VertexInputAttributeDescription{
-            .{
-                .binding = 0,
-                .location = 0,
-                .format = .r32g32b32_sfloat,
-                .offset = @offsetOf(Vertex, "pos"),
-            },
-            .{
-                .binding = 0,
-                .location = 1,
-                .format = .r32g32b32_sfloat,
-                .offset = @offsetOf(Vertex, "color"),
-            },
-            .{
-                .binding = 0,
-                .location = 2,
-                .format = .r32g32_sfloat,
-                .offset = @offsetOf(Vertex, "tex_coord"),
-            },
-        };
-    }
-};
-
-const UniformBufferObject = struct {
-    model: za.Mat4 align(16),
-    view: za.Mat4 align(16),
-    proj: za.Mat4 align(16),
-};
-
-const vertices = [_]Vertex{
-    .{ .pos = .{ -0.5, -0.5, 0.0 }, .color = .{ 1, 0, 0 }, .tex_coord = .{ 0, 0 } },
-    .{ .pos = .{ 0.5, -0.5, 0.0 }, .color = .{ 0, 1, 0 }, .tex_coord = .{ 1, 0 } },
-    .{ .pos = .{ 0.5, 0.5, 0.0 }, .color = .{ 0, 0, 1 }, .tex_coord = .{ 1, 1 } },
-    .{ .pos = .{ -0.5, 0.5, 0.0 }, .color = .{ 1, 1, 1 }, .tex_coord = .{ 0, 1 } },
-
-    .{ .pos = .{ -0.5, -0.5, -0.5 }, .color = .{ 1, 0, 0 }, .tex_coord = .{ 0, 0 } },
-    .{ .pos = .{ 0.5, -0.5, -0.5 }, .color = .{ 0, 1, 0 }, .tex_coord = .{ 1, 0 } },
-    .{ .pos = .{ 0.5, 0.5, -0.5 }, .color = .{ 0, 0, 1 }, .tex_coord = .{ 1, 1 } },
-    .{ .pos = .{ -0.5, 0.5, -0.5 }, .color = .{ 1, 1, 1 }, .tex_coord = .{ 0, 1 } },
-};
-
-const indices_input = [_]u16{
-    0, 1, 2, 2, 3, 0, //
-    4, 5, 6, 6, 7, 4, //
-};
-
 
 
 
@@ -675,8 +616,8 @@ pub const VulkanBackend = struct {
             },
         };
 
-        const binding_description = Vertex.getBindingDescription();
-        const attribute_descriptions = Vertex.getAttributeDescriptions();
+        const binding_description = mesh.Vertex.getBindingDescription();
+        const attribute_descriptions = mesh.Vertex.getAttributeDescriptions();
 
         const vertex_input_info = vk.PipelineVertexInputStateCreateInfo{
             .flags = .{},
@@ -1036,14 +977,14 @@ pub const VulkanBackend = struct {
     }
 
     fn createVertexBuffer(self: *Self) !void {
-        const buffer_size: vk.DeviceSize = @sizeOf(@TypeOf(vertices));
+        const buffer_size: vk.DeviceSize = @sizeOf(@TypeOf(quad.vertices));
 
         var staging_buffer: vk.Buffer = undefined;
         var staging_buffer_memory: vk.DeviceMemory = undefined;
         try createBuffer(self, buffer_size, .{ .transfer_src_bit = true }, .{ .host_visible_bit = true, .host_coherent_bit = true }, &staging_buffer, &staging_buffer_memory);
 
         const data = try self.vkd.mapMemory(self.device, staging_buffer_memory, 0, buffer_size, .{});
-        std.mem.copy(u8, @ptrCast([*]u8, data.?)[0..buffer_size], std.mem.sliceAsBytes(&vertices));
+        std.mem.copy(u8, @ptrCast([*]u8, data.?)[0..buffer_size], std.mem.sliceAsBytes(&quad.vertices));
         self.vkd.unmapMemory(self.device, staging_buffer_memory);
 
         try createBuffer(self, buffer_size, .{ .transfer_dst_bit = true, .vertex_buffer_bit = true }, .{ .device_local_bit = true }, &self.vertex_buffer, &self.vertex_buffer_memory);
@@ -1055,14 +996,14 @@ pub const VulkanBackend = struct {
     }
 
     fn createIndexBuffer(self: *Self) !void {
-        const buffer_size: vk.DeviceSize = @sizeOf(@TypeOf(indices_input));
+        const buffer_size: vk.DeviceSize = @sizeOf(@TypeOf(quad.indices));
 
         var staging_buffer: vk.Buffer = undefined;
         var staging_buffer_memory: vk.DeviceMemory = undefined;
         try createBuffer(self, buffer_size, .{ .transfer_src_bit = true }, .{ .host_visible_bit = true, .host_coherent_bit = true }, &staging_buffer, &staging_buffer_memory);
 
         const data = try self.vkd.mapMemory(self.device, staging_buffer_memory, 0, buffer_size, .{});
-        std.mem.copy(u8, @ptrCast([*]u8, data.?)[0..buffer_size], std.mem.sliceAsBytes(&indices_input));
+        std.mem.copy(u8, @ptrCast([*]u8, data.?)[0..buffer_size], std.mem.sliceAsBytes(&quad.indices));
         self.vkd.unmapMemory(self.device, staging_buffer_memory);
 
         try createBuffer(self, buffer_size, .{ .transfer_dst_bit = true, .index_buffer_bit = true }, .{ .device_local_bit = true }, &self.index_buffer, &self.index_buffer_memory);
@@ -1074,7 +1015,7 @@ pub const VulkanBackend = struct {
     }
 
     fn createUniformBuffers(self: *Self) !void {
-        const buffer_size: vk.DeviceSize = @sizeOf(UniformBufferObject);
+        const buffer_size: vk.DeviceSize = @sizeOf(render_types.UniformBufferObject);
 
         self.uniform_buffers = try self.allocator.alloc(vk.Buffer, MAX_FRAMES_IN_FLIGHT);
         self.uniform_buffers_memory = try self.allocator.alloc(vk.DeviceMemory, MAX_FRAMES_IN_FLIGHT);
@@ -1120,7 +1061,7 @@ pub const VulkanBackend = struct {
             const buffer_info = [_]vk.DescriptorBufferInfo{.{
                 .buffer = self.uniform_buffers.?[i],
                 .offset = 0,
-                .range = @sizeOf(UniformBufferObject),
+                .range = @sizeOf(render_types.UniformBufferObject),
             }};
 
             const image_info = [_]vk.DescriptorImageInfo{.{
@@ -1297,7 +1238,7 @@ pub const VulkanBackend = struct {
 
             self.vkd.cmdBindDescriptorSets(command_buffer, .graphics, self.pipeline_layout, 0, 1, @ptrCast([*]const vk.DescriptorSet, &self.descriptor_sets.?[self.current_frame]), 0, undefined);
 
-            self.vkd.cmdDrawIndexed(command_buffer, indices_input.len, 1, 0, 0, 0);
+            self.vkd.cmdDrawIndexed(command_buffer, quad.indices.len, 1, 0, 0, 0);
         }
         self.vkd.cmdEndRenderPass(command_buffer);
 
@@ -1320,15 +1261,15 @@ pub const VulkanBackend = struct {
     fn updateUniformBuffer(self: *Self, current_image: u32) !void {
         const time: f32 = (@intToFloat(f32, (try std.time.Instant.now()).since(self.start_time)) / @intToFloat(f32, std.time.ns_per_s));
 
-        var ubo = UniformBufferObject{
+        var ubo = render_types.UniformBufferObject{
             .model = za.Mat4.identity().rotate(time * 90.0, za.Vec3.new(0.0, 0.0, 1.0)),
             .view = za.lookAt(za.Vec3.new(2, 2, 2), za.Vec3.new(0, 0, 0), za.Vec3.new(0, 0, 1)),
             .proj = za.perspective(45.0, @intToFloat(f32, self.swap_chain_extent.width) / @intToFloat(f32, self.swap_chain_extent.height), 0.1, 10),
         };
         ubo.proj.data[1][1] *= -1;
 
-        const data = try self.vkd.mapMemory(self.device, self.uniform_buffers_memory.?[current_image], 0, @sizeOf(UniformBufferObject), .{});
-        std.mem.copy(u8, @ptrCast([*]u8, data.?)[0..@sizeOf(UniformBufferObject)], std.mem.asBytes(&ubo));
+        const data = try self.vkd.mapMemory(self.device, self.uniform_buffers_memory.?[current_image], 0, @sizeOf(render_types.UniformBufferObject), .{});
+        std.mem.copy(u8, @ptrCast([*]u8, data.?)[0..@sizeOf(render_types.UniformBufferObject)], std.mem.asBytes(&ubo));
         self.vkd.unmapMemory(self.device, self.uniform_buffers_memory.?[current_image]);
     }
 

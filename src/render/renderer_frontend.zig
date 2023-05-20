@@ -1,7 +1,7 @@
 const std = @import("std");
 const VulkanBackend = @import("../vulkan/vulkan_backend.zig").VulkanBackend;
 const Logger = @import("../core/log.zig").scoped(.renderer);
-const GlfwWindow = @import("../glfw_window.zig");
+const GlfwWindow = @import("../GlfwWindow.zig");
 
 
 

@@ -1,7 +1,7 @@
 const std = @import("std");
-const RendererFrontend = @import("renderer/renderer_frontend.zig").RendererFrontend;
+const RendererFrontend = @import("render/renderer_frontend.zig").RendererFrontend;
 const Logger = @import("core/log.zig").scoped(.hell);
-const GlfwWindow = @import("glfw_window.zig");
+const GlfwWindow = @import("GlfwWindow.zig");
 
 
 const APP_NAME = "hell-app";
