@@ -1,21 +1,20 @@
-const std = @import("std");
-const assert = std.debug.assert;
+const std       = @import("std");
+const assert    = std.debug.assert;
 const Allocator = std.mem.Allocator;
 
-const vk = @import("vulkan");
-const za = @import("zalgebra");
-const resources = @import("resources");
-const log = @import("../core/log.zig");
-const Logger = log.scoped(.vulkan);
-const GlfwWindow = @import("../GlfwWindow.zig");
+const vk               = @import("vulkan");
+const za               = @import("zalgebra");
+const resources        = @import("resources");
+const log              = @import("../core/log.zig");
+const Logger           = log.scoped(.vulkan);
+const GlfwWindow       = @import("../GlfwWindow.zig");
 const InstanceDispatch = @import("dispatch.zig").InstanceDispatch;
-const BaseDispatch = @import("dispatch.zig").BaseDispatch;
-const DeviceDispatch = @import("dispatch.zig").DeviceDispatch;
-const config = @import("vulkan_config.zig");
-const render_types = @import("../render/render_types.zig");
-const mesh = @import("../render/mesh.zig");
-const Mesh = mesh.Mesh;
-const quad = Mesh.quad();
+const BaseDispatch     = @import("dispatch.zig").BaseDispatch;
+const DeviceDispatch   = @import("dispatch.zig").DeviceDispatch;
+const config           = @import("vulkan_config.zig");
+const render_types     = @import("../render/render_types.zig");
+const Mesh             = render_types.Mesh;
+const Vertex           = render_types.Vertex;
 
 const vulkan_types = @import("vulkan_types.zig");
 const Buffer = vulkan_types.Buffer;
@@ -28,6 +27,8 @@ const c = @cImport({
     @cInclude("stb_image.h");
 });
 
+// ----------------------------------------------
+
 const APP_NAME = "hell-app";
 const WIDTH: u32 = 800;
 const HEIGHT: u32 = 600;
@@ -35,6 +36,7 @@ const MAX_FRAMES_IN_FLIGHT: u32 = 2;
 const validation_layers = [_][*:0]const u8{"VK_LAYER_KHRONOS_validation"};
 const device_extensions = [_][*:0]const u8{vk.extension_info.khr_swapchain.name};
 
+// ----------------------------------------------
 
 const QueueFamilyIndices = struct {
     graphics_family: ?u32 = null,
@@ -44,6 +46,8 @@ const QueueFamilyIndices = struct {
         return self.graphics_family != null and self.present_family != null;
     }
 };
+
+// ----------------------------------------------
 
 pub const SwapChainSupportDetails = struct {
     allocator: Allocator,
@@ -124,18 +128,12 @@ pub const VulkanBackend = struct {
     start_time: std.time.Instant,
 
     pub fn init(allocator: Allocator, window: *GlfwWindow) !Self {
-        return Self{
+        var self = Self{
             .allocator = allocator,
             .start_time = try std.time.Instant.now(),
             .window = window,
         };
-    }
 
-    pub fn run(self: *Self) !void {
-        try self.initVulkan();
-    }
-
-    fn initVulkan(self: *Self) !void {
         try self.createInstance();
         try self.setupDebugMessenger();
         try self.createSurface();
@@ -152,13 +150,13 @@ pub const VulkanBackend = struct {
         try self.createTextureImage();
         try self.createTextureImageView();
         try self.createTextureSampler();
-        try self.createVertexBuffer();
-        try self.createIndexBuffer();
         try self.createUniformBuffers();
         try self.createDescriptorPool();
         try self.createDescriptorSets();
         try self.createCommandBuffers();
         try self.createSyncObjects();
+
+        return self;
     }
 
     pub fn waitDeviceIdle(self: *VulkanBackend) !void {
@@ -597,8 +595,8 @@ pub const VulkanBackend = struct {
             },
         };
 
-        const binding_description = mesh.Vertex.getBindingDescription();
-        const attribute_descriptions = mesh.Vertex.getAttributeDescriptions();
+        const binding_description = Vertex.getBindingDescription();
+        const attribute_descriptions = Vertex.getAttributeDescriptions();
 
         const vertex_input_info = vk.PipelineVertexInputStateCreateInfo{
             .flags = .{},
@@ -954,38 +952,44 @@ pub const VulkanBackend = struct {
         try self.endSingleTimeCommands(command_buffer);
     }
 
-    fn createVertexBuffer(self: *Self) !void {
-        const buffer_size: vk.DeviceSize = @sizeOf(@TypeOf(quad.vertices));
+    pub fn createVertexBuffer(self: *Self, vertices: []const Vertex) !ResourceHandle {
+        const buffer_size: vk.DeviceSize = @sizeOf(Vertex) * vertices.len;
+        Logger.debug("creating vertex-buffer of size: {}\n", .{buffer_size});
 
         const staging_buffer_handle = try createBuffer(self, buffer_size, .{ .transfer_src_bit = true }, .{ .host_visible_bit = true, .host_coherent_bit = true });
         const staging_buffer = self.getBuffer(staging_buffer_handle);
         defer self.freeBuffer(staging_buffer_handle);
 
         const data = try self.vkd.mapMemory(self.device, staging_buffer.mem, 0, buffer_size, .{});
-        std.mem.copy(u8, @ptrCast([*]u8, data.?)[0..buffer_size], std.mem.sliceAsBytes(&quad.vertices));
+        std.mem.copy(u8, @ptrCast([*]u8, data.?)[0..buffer_size], std.mem.sliceAsBytes(vertices));
         self.vkd.unmapMemory(self.device, staging_buffer.mem);
 
         self.vertex_buffer_handle = try createBuffer(self, buffer_size, .{ .transfer_dst_bit = true, .vertex_buffer_bit = true }, .{ .device_local_bit = true });
         const vertex_buffer = self.getBuffer(self.vertex_buffer_handle);
 
         try copyBuffer(self, staging_buffer.buf, vertex_buffer.buf, buffer_size);
+
+        return self.vertex_buffer_handle;
     }
 
-    fn createIndexBuffer(self: *Self) !void {
-        const buffer_size: vk.DeviceSize = @sizeOf(@TypeOf(quad.indices));
+    pub fn createIndexBuffer(self: *Self, indices: []const u16) !ResourceHandle {
+        const buffer_size: vk.DeviceSize = @sizeOf(u16) * indices.len;
+        Logger.debug("creating index-buffer of size: {}\n", .{buffer_size});
 
         const staging_buffer_handle = try createBuffer(self, buffer_size, .{ .transfer_src_bit = true }, .{ .host_visible_bit = true, .host_coherent_bit = true });
         const staging_buffer = self.getBuffer(staging_buffer_handle);
         defer self.freeBuffer(staging_buffer_handle);
 
         const data = try self.vkd.mapMemory(self.device, staging_buffer.mem, 0, buffer_size, .{});
-        std.mem.copy(u8, @ptrCast([*]u8, data.?)[0..buffer_size], std.mem.sliceAsBytes(&quad.indices));
+        std.mem.copy(u8, @ptrCast([*]u8, data.?)[0..buffer_size], std.mem.sliceAsBytes(indices));
         self.vkd.unmapMemory(self.device, staging_buffer.mem);
 
         self.index_buffer_handle = try createBuffer(self, buffer_size, .{ .transfer_dst_bit = true, .index_buffer_bit = true }, .{ .device_local_bit = true });
         const index_buffer = self.getBuffer(self.index_buffer_handle);
 
         try copyBuffer(self, staging_buffer.buf, index_buffer.buf, buffer_size);
+
+        return self.index_buffer_handle;
     }
 
     fn createUniformBuffers(self: *Self) !void {
@@ -1184,7 +1188,7 @@ pub const VulkanBackend = struct {
         }, self.command_buffers.?.ptr);
     }
 
-    fn recordCommandBuffer(self: *Self, command_buffer: vk.CommandBuffer, image_index: u32) !void {
+    fn recordCommandBuffer(self: *Self, command_buffer: vk.CommandBuffer, image_index: u32, indices: []u16) !void {
         try self.vkd.beginCommandBuffer(command_buffer, &.{
             .flags = .{},
             .p_inheritance_info = null,
@@ -1234,7 +1238,7 @@ pub const VulkanBackend = struct {
 
             self.vkd.cmdBindDescriptorSets(command_buffer, .graphics, self.pipeline_layout, 0, 1, @ptrCast([*]const vk.DescriptorSet, &self.descriptor_sets.?[self.current_frame]), 0, undefined);
 
-            self.vkd.cmdDrawIndexed(command_buffer, quad.indices.len, 1, 0, 0, 0);
+            self.vkd.cmdDrawIndexed(command_buffer, @intCast(u32, indices.len), 1, 0, 0, 0);
         }
         self.vkd.cmdEndRenderPass(command_buffer);
 
@@ -1270,7 +1274,7 @@ pub const VulkanBackend = struct {
         self.vkd.unmapMemory(self.device, buffer.mem);
     }
 
-    pub fn drawFrame(self: *Self) !void {
+    pub fn drawFrame(self: *Self, mesh: *Mesh) !void {
         _ = try self.vkd.waitForFences(self.device, 1, @ptrCast([*]const vk.Fence, &self.in_flight_fences.?[self.current_frame]), vk.TRUE, std.math.maxInt(u64));
 
         const result = self.vkd.acquireNextImageKHR(self.device, self.swap_chain, std.math.maxInt(u64), self.image_available_semaphores.?[self.current_frame], .null_handle) catch |err| switch (err) {
@@ -1290,7 +1294,7 @@ pub const VulkanBackend = struct {
         try self.vkd.resetFences(self.device, 1, @ptrCast([*]const vk.Fence, &self.in_flight_fences.?[self.current_frame]));
 
         try self.vkd.resetCommandBuffer(self.command_buffers.?[self.current_frame], .{});
-        try self.recordCommandBuffer(self.command_buffers.?[self.current_frame], result.image_index);
+        try self.recordCommandBuffer(self.command_buffers.?[self.current_frame], result.image_index, &mesh.indices);
 
         const wait_semaphores = [_]vk.Semaphore{self.image_available_semaphores.?[self.current_frame]};
         const wait_stages = [_]vk.PipelineStageFlags{.{ .color_attachment_output_bit = true }};
