@@ -17,60 +17,30 @@ pub fn build(b: *std.Build) !void {
         .optimize = optimize,
     });
 
-    // glfw
-    // exe.addModule("glfw", glfw.module(b));
-    // try glfw.link(b, exe, .{});
-
-    // vulkan-zig
-    // const gen = VkGenerateStep.create(b, "vk.xml");
-    // exe.addModule("vulkan", gen.getModule());
-
-    // const shaders = ShaderCompileStep.create(
-    //     b,
-    //     &[_][]const u8 { "glslc", "--target-env=vulkan1.2" },
-    //     "-o",
-    // );
-    // shaders.add("triangle_vert", "src/shaders/triangle.vert", .{});
-    // shaders.add("triangle_frag", "src/shaders/triangle.frag", .{});
-    // exe.addModule("shaders", shaders.getModule());
-
-
     // const gen = vkgen.VkGenerateStep.init(b, deps.cache ++ "/git/github.com/Snektron/vulkan-zig/examples/vk.xml", "vk.zig");
     const gen = vkgen.VkGenerateStep.create(b, "vk.xml");
     exe.addModule("vulkan", gen.getModule());
 
-    // // shader resources, to be compiled using glslc
-    // const shaders = vkbuild.ResourceGenStep.init(b, "resources.zig");
-    // shaders.addShader("vert_27", "src/27_shader_depth.vert");
-    // shaders.addShader("frag_27", "src/27_shader_depth.frag");
     const shaders = vkgen.ShaderCompileStep.create(
         b,
         &[_][]const u8 { "glslc", "--target-env=vulkan1.2" },
         "-o",
     );
-    shaders.add("vert_27", "src/27_shader_depth.vert", .{});
-    shaders.add("frag_27", "src/27_shader_depth.frag", .{});
+    shaders.add("vert_27", "src/shaders/27_shader_depth.vert", .{});
+    shaders.add("frag_27", "src/shaders/27_shader_depth.frag", .{});
     exe.addModule("resources", shaders.getModule());
 
 
     exe.linkLibC();
-    // exe.addIncludeDir(deps.cache ++ "/git/github.com/nothings/stb");
     exe.addIncludePath(deps.cache ++ "/git/github.com/nothings/stb");
     exe.addCSourceFile("libs/stb/stb_impl.c", &.{"-std=c99"});
 
     // mach-glfw
-    // exe.addPackage(glfw.pkg);
     exe.addModule("glfw", glfw.module(b));
     try glfw.link(b, exe, .{});
 
-    // vulkan-zig
-    // exe.addPackage(gen.package);
-    // exe.addPackage(shaders.package);
-
     // zigmod fetched deps
     deps.addAllTo(exe);
-
-
 
 
     // This declares intent for the executable to be installed into the

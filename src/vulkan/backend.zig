@@ -1,128 +1,30 @@
 const std = @import("std");
-const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
 
 const vk = @import("vulkan");
 const za = @import("zalgebra");
 const resources = @import("resources");
-const log = @import("../log.zig");
+const log = @import("../core/log.zig");
 const logger = log.scoped(.hell);
 const GlfwWindow = @import("../window.zig").GlfwWindow;
+const InstanceDispatch = @import("dispatch.zig").InstanceDispatch;
+const BaseDispatch = @import("dispatch.zig").BaseDispatch;
+const DeviceDispatch = @import("dispatch.zig").DeviceDispatch;
+const config = @import("vulkan_config.zig");
 
 const c = @cImport({
     @cInclude("stb_image.h");
 });
 
+
+
 const APP_NAME = "hell-app";
 const WIDTH: u32 = 800;
 const HEIGHT: u32 = 600;
-
 const MAX_FRAMES_IN_FLIGHT: u32 = 2;
-
 const validation_layers = [_][*:0]const u8{"VK_LAYER_KHRONOS_validation"};
-
 const device_extensions = [_][*:0]const u8{vk.extension_info.khr_swapchain.name};
 
-const enable_validation_layers: bool = switch (builtin.mode) {
-    .Debug, .ReleaseSafe => true,
-    else => false,
-};
-
-
-const BaseDispatch = vk.BaseWrapper(.{
-    .createInstance = true,
-    .enumerateInstanceLayerProperties = true,
-});
-
-const InstanceDispatch = vk.InstanceWrapper(.{
-    .createDebugUtilsMessengerEXT = enable_validation_layers,
-    .createDevice = true,
-    .destroyDebugUtilsMessengerEXT = enable_validation_layers,
-    .destroyInstance = true,
-    .destroySurfaceKHR = true,
-    .enumerateDeviceExtensionProperties = true,
-    .enumeratePhysicalDevices = true,
-    .getDeviceProcAddr = true,
-    .getPhysicalDeviceFeatures = true,
-    .getPhysicalDeviceFormatProperties = true,
-    .getPhysicalDeviceMemoryProperties = true,
-    .getPhysicalDeviceProperties = true,
-    .getPhysicalDeviceQueueFamilyProperties = true,
-    .getPhysicalDeviceSurfaceCapabilitiesKHR = true,
-    .getPhysicalDeviceSurfaceFormatsKHR = true,
-    .getPhysicalDeviceSurfacePresentModesKHR = true,
-    .getPhysicalDeviceSurfaceSupportKHR = true,
-});
-
-const DeviceDispatch = vk.DeviceWrapper(.{
-    .acquireNextImageKHR = true,
-    .allocateCommandBuffers = true,
-    .allocateDescriptorSets = true,
-    .allocateMemory = true,
-    .beginCommandBuffer = true,
-    .bindBufferMemory = true,
-    .bindImageMemory = true,
-    .cmdBeginRenderPass = true,
-    .cmdBindDescriptorSets = true,
-    .cmdBindIndexBuffer = true,
-    .cmdBindPipeline = true,
-    .cmdBindVertexBuffers = true,
-    .cmdCopyBuffer = true,
-    .cmdCopyBufferToImage = true,
-    .cmdDrawIndexed = true,
-    .cmdEndRenderPass = true,
-    .cmdPipelineBarrier = true,
-    .cmdSetViewport = true,
-    .cmdSetScissor = true,
-    .createBuffer = true,
-    .createCommandPool = true,
-    .createDescriptorPool = true,
-    .createDescriptorSetLayout = true,
-    .createFence = true,
-    .createFramebuffer = true,
-    .createGraphicsPipelines = true,
-    .createImage = true,
-    .createImageView = true,
-    .createPipelineLayout = true,
-    .createRenderPass = true,
-    .createSampler = true,
-    .createSemaphore = true,
-    .createShaderModule = true,
-    .createSwapchainKHR = true,
-    .destroyBuffer = true,
-    .destroyCommandPool = true,
-    .destroyDescriptorPool = true,
-    .destroyDescriptorSetLayout = true,
-    .destroyDevice = true,
-    .destroyFence = true,
-    .destroyFramebuffer = true,
-    .destroyImage = true,
-    .destroyImageView = true,
-    .destroyPipeline = true,
-    .destroyPipelineLayout = true,
-    .destroyRenderPass = true,
-    .destroySampler = true,
-    .destroySemaphore = true,
-    .destroyShaderModule = true,
-    .destroySwapchainKHR = true,
-    .deviceWaitIdle = true,
-    .endCommandBuffer = true,
-    .freeCommandBuffers = true,
-    .freeMemory = true,
-    .getBufferMemoryRequirements = true,
-    .getDeviceQueue = true,
-    .getImageMemoryRequirements = true,
-    .getSwapchainImagesKHR = true,
-    .mapMemory = true,
-    .queuePresentKHR = true,
-    .queueSubmit = true,
-    .queueWaitIdle = true,
-    .resetCommandBuffer = true,
-    .resetFences = true,
-    .unmapMemory = true,
-    .updateDescriptorSets = true,
-    .waitForFences = true,
-});
 
 const QueueFamilyIndices = struct {
     graphics_family: ?u32 = null,
@@ -416,7 +318,7 @@ pub const VulkanBackend = struct {
 
         if (self.device != .null_handle) self.vkd.destroyDevice(self.device, null);
 
-        if (enable_validation_layers and self.debug_messenger != .null_handle) self.vki.destroyDebugUtilsMessengerEXT(self.instance, self.debug_messenger, null);
+        if (config.enable_validation_layers and self.debug_messenger != .null_handle) self.vki.destroyDebugUtilsMessengerEXT(self.instance, self.debug_messenger, null);
 
         if (self.surface != .null_handle) self.vki.destroySurfaceKHR(self.instance, self.surface, null);
         if (self.instance != .null_handle) self.vki.destroyInstance(self.instance, null);
@@ -447,7 +349,7 @@ pub const VulkanBackend = struct {
         const vk_proc = @ptrCast(*const fn (instance: vk.Instance, procname: [*:0]const u8) callconv(.C) vk.PfnVoidFunction, &GlfwWindow.getInstanceProcAddress);
         self.vkb = try BaseDispatch.load(vk_proc);
 
-        if (enable_validation_layers and !try self.checkValidationLayerSupport()) {
+        if (config.enable_validation_layers and !try self.checkValidationLayerSupport()) {
             return error.MissingValidationLayer;
         }
 
@@ -471,7 +373,7 @@ pub const VulkanBackend = struct {
             .pp_enabled_extension_names = extensions.items.ptr,
         };
 
-        if (enable_validation_layers) {
+        if (config.enable_validation_layers) {
             create_info.enabled_layer_count = validation_layers.len;
             create_info.pp_enabled_layer_names = &validation_layers;
 
@@ -504,7 +406,7 @@ pub const VulkanBackend = struct {
     }
 
     fn setupDebugMessenger(self: *Self) !void {
-        if (!enable_validation_layers) return;
+        if (!config.enable_validation_layers) return;
 
         var create_info: vk.DebugUtilsMessengerCreateInfoEXT = undefined;
         populateDebugMessengerCreateInfo(&create_info);
@@ -576,7 +478,7 @@ pub const VulkanBackend = struct {
             .p_enabled_features = &device_features,
         };
 
-        if (enable_validation_layers) {
+        if (config.enable_validation_layers) {
             create_info.enabled_layer_count = validation_layers.len;
             create_info.pp_enabled_layer_names = &validation_layers;
         }
@@ -1618,7 +1520,7 @@ pub const VulkanBackend = struct {
         var extensions = std.ArrayList([*:0]const u8).init(allocator);
         try extensions.appendSlice(GlfwWindow.getRequiredInstanceExtensions() orelse @panic("failed to get extensions"));
 
-        if (enable_validation_layers) {
+        if (config.enable_validation_layers) {
             try extensions.append(vk.extension_info.ext_debug_utils.name);
         }
 
