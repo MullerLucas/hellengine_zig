@@ -28,7 +28,7 @@ pub fn init(width: u32, height: u32, app_name: [*:0]const u8) !GlfwWindow {
 }
 
 pub fn deinit(self: *GlfwWindow) void {
-    Logger.info("deinitialize Glfw-Window", .{});
+    Logger.info("deinitialize Glfw-Window\n", .{});
     self.window.?.destroy();
     glfw.terminate();
 }

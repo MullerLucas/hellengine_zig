@@ -19,6 +19,7 @@ const quad = Mesh.quad();
 
 const vulkan_types = @import("vulkan_types.zig");
 const Buffer = vulkan_types.Buffer;
+const BufferList = vulkan_types.BufferList;
 
 const core_types = @import("../core/core_types.zig");
 const ResourceHandle = core_types.ResourceHandle;
@@ -59,8 +60,6 @@ pub const SwapChainSupportDetails = struct {
         if (self.present_modes != null) self.allocator.free(self.present_modes.?);
     }
 };
-
-pub const MAX_BUFFERS: usize = 1024;
 
 
 pub const VulkanBackend = struct {
@@ -107,12 +106,9 @@ pub const VulkanBackend = struct {
     texture_sampler: vk.Sampler = .null_handle,
 
     // buffer stuff
-    buffer_count: usize = 0,
-    buffers: [MAX_BUFFERS]vk.Buffer           = [_]vk.Buffer       { .null_handle } ** MAX_BUFFERS,
-    buffer_mems: [MAX_BUFFERS]vk.DeviceMemory = [_]vk.DeviceMemory { .null_handle } ** MAX_BUFFERS,
-
-    vertex_buffer_handle:  ResourceHandle = undefined,
-    index_buffer_handle:   ResourceHandle = undefined,
+    buffers: BufferList = BufferList{},
+    vertex_buffer_handle: ResourceHandle = undefined,
+    index_buffer_handle:  ResourceHandle = undefined,
     uniform_buffer_handles: ?[]ResourceHandle = null,
 
     descriptor_pool: vk.DescriptorPool   = .null_handle,
@@ -136,9 +132,7 @@ pub const VulkanBackend = struct {
     }
 
     pub fn run(self: *Self) !void {
-
         try self.initVulkan();
-        // try self.mainLoop();
     }
 
     fn initVulkan(self: *Self) !void {
@@ -232,6 +226,7 @@ pub const VulkanBackend = struct {
 
         self.freeBuffer(self.index_buffer_handle);
         self.freeBuffer(self.vertex_buffer_handle);
+        self.buffers.deinit(self.allocator);
 
         if (self.render_finished_semaphores != null) {
             for (self.render_finished_semaphores.?) |semaphore| {
@@ -1078,9 +1073,7 @@ pub const VulkanBackend = struct {
     }
 
     fn createBuffer(self: *Self, size: vk.DeviceSize, usage: vk.BufferUsageFlags, properties: vk.MemoryPropertyFlags) !ResourceHandle {
-        Logger.debug("create buffer '{}'\n", .{ self.buffer_count });
-
-        assert(self.buffer_count <= MAX_BUFFERS);
+        Logger.debug("create buffer '{}'\n", .{ self.buffers.len });
 
         const buffer = try self.vkd.createBuffer(self.device, &.{
             .flags = .{},
@@ -1099,11 +1092,12 @@ pub const VulkanBackend = struct {
         }, null);
         try self.vkd.bindBufferMemory(self.device, buffer, buffer_memory, 0);
 
-        self.buffers[self.buffer_count] = buffer;
-        self.buffer_mems[self.buffer_count] = buffer_memory;
-        defer self.buffer_count += 1;
+        try self.buffers.append(self.allocator, Buffer {
+            .buf = buffer,
+            .mem = buffer_memory
+        });
 
-        return ResourceHandle { .value = self.buffer_count };
+        return ResourceHandle { .value = self.buffers.len - 1 };
     }
 
     fn freeBuffer(self: *Self, handle: ResourceHandle) void {
@@ -1115,25 +1109,8 @@ pub const VulkanBackend = struct {
     }
 
     fn getBuffer(self: *Self, handle: ResourceHandle) Buffer {
-        assert(self.buffers[handle.value]     != .null_handle);
-        assert(self.buffer_mems[handle.value] != .null_handle);
-
-        return Buffer {
-            .buf = self.buffers[handle.value],
-            .mem = self.buffer_mems[handle.value],
-        };
+        return self.buffers.get(handle.value);
     }
-
-    // fn addResourceHandle(arr: []ResourceHandle, handle: ResourceHandle) ResourceHandle {
-    //     const next_idx = for (arr, 0..) |a, idx| {
-    //         if (a.eql(&ResourceHandle.invalid)) {
-    //             break idx;
-    //         }
-    //     } else unreachable;
-    //
-    //     arr[next_idx] = handle;
-    //     return ResourceHandle {.value = next_idx };
-    // }
 
     fn beginSingleTimeCommands(self: *Self) !vk.CommandBuffer {
         const alloc_info = vk.CommandBufferAllocateInfo{
