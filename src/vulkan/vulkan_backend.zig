@@ -1,11 +1,12 @@
 const std = @import("std");
+const assert = std.debug.assert;
 const Allocator = std.mem.Allocator;
 
 const vk = @import("vulkan");
 const za = @import("zalgebra");
 const resources = @import("resources");
 const log = @import("../core/log.zig");
-const Logger = log.scoped(.hell);
+const Logger = log.scoped(.vulkan);
 const GlfwWindow = @import("../GlfwWindow.zig");
 const InstanceDispatch = @import("dispatch.zig").InstanceDispatch;
 const BaseDispatch = @import("dispatch.zig").BaseDispatch;
@@ -15,6 +16,12 @@ const render_types = @import("../render/render_types.zig");
 const mesh = @import("../render/mesh.zig");
 const Mesh = mesh.Mesh;
 const quad = Mesh.quad();
+
+const vulkan_types = @import("vulkan_types.zig");
+const Buffer = vulkan_types.Buffer;
+
+const core_types = @import("../core/core_types.zig");
+const ResourceHandle = core_types.ResourceHandle;
 
 const c = @cImport({
     @cInclude("stb_image.h");
@@ -53,6 +60,7 @@ pub const SwapChainSupportDetails = struct {
     }
 };
 
+pub const MAX_BUFFERS: usize = 1024;
 
 
 pub const VulkanBackend = struct {
@@ -98,15 +106,16 @@ pub const VulkanBackend = struct {
     texture_image_view: vk.ImageView = .null_handle,
     texture_sampler: vk.Sampler = .null_handle,
 
-    vertex_buffer: vk.Buffer = .null_handle,
-    vertex_buffer_memory: vk.DeviceMemory = .null_handle,
-    index_buffer: vk.Buffer = .null_handle,
-    index_buffer_memory: vk.DeviceMemory = .null_handle,
+    // buffer stuff
+    buffer_count: usize = 0,
+    buffers: [MAX_BUFFERS]vk.Buffer           = [_]vk.Buffer       { .null_handle } ** MAX_BUFFERS,
+    buffer_mems: [MAX_BUFFERS]vk.DeviceMemory = [_]vk.DeviceMemory { .null_handle } ** MAX_BUFFERS,
 
-    uniform_buffers: ?[]vk.Buffer = null,
-    uniform_buffers_memory: ?[]vk.DeviceMemory = null,
+    vertex_buffer_handle:  ResourceHandle = undefined,
+    index_buffer_handle:   ResourceHandle = undefined,
+    uniform_buffer_handles: ?[]ResourceHandle = null,
 
-    descriptor_pool: vk.DescriptorPool = .null_handle,
+    descriptor_pool: vk.DescriptorPool   = .null_handle,
     descriptor_sets: ?[]vk.DescriptorSet = null,
 
     command_buffers: ?[]vk.CommandBuffer = null,
@@ -115,8 +124,6 @@ pub const VulkanBackend = struct {
     render_finished_semaphores: ?[]vk.Semaphore = null,
     in_flight_fences: ?[]vk.Fence = null,
     current_frame: u32 = 0,
-
-    // framebuffer_resized: bool = false,
 
     start_time: std.time.Instant,
 
@@ -159,15 +166,6 @@ pub const VulkanBackend = struct {
         try self.createCommandBuffers();
         try self.createSyncObjects();
     }
-
-    // fn mainLoop(self: *Self) !void {
-    //     while (!self.window.shouldClose()) {
-    //         GlfwWindow.pollEvents();
-    //         try self.drawFrame();
-    //     }
-    //
-    //     _ = try self.vkd.deviceWaitIdle(self.device);
-    // }
 
     pub fn waitDeviceIdle(self: *VulkanBackend) !void {
         try self.vkd.deviceWaitIdle(self.device);
@@ -214,17 +212,11 @@ pub const VulkanBackend = struct {
         if (self.pipeline_layout != .null_handle) self.vkd.destroyPipelineLayout(self.device, self.pipeline_layout, null);
         if (self.render_pass != .null_handle) self.vkd.destroyRenderPass(self.device, self.render_pass, null);
 
-        if (self.uniform_buffers != null) {
-            for (self.uniform_buffers.?) |uniform_buffer| {
-                self.vkd.destroyBuffer(self.device, uniform_buffer, null);
+        if (self.uniform_buffer_handles != null) {
+            for (self.uniform_buffer_handles.?) |uniform_buffer_handle| {
+                self.freeBuffer(uniform_buffer_handle);
             }
-            self.allocator.free(self.uniform_buffers.?);
-        }
-        if (self.uniform_buffers_memory != null) {
-            for (self.uniform_buffers_memory.?) |uniform_buffer_memory| {
-                self.vkd.freeMemory(self.device, uniform_buffer_memory, null);
-            }
-            self.allocator.free(self.uniform_buffers_memory.?);
+            self.allocator.free(self.uniform_buffer_handles.?);
         }
 
         if (self.descriptor_pool != .null_handle) self.vkd.destroyDescriptorPool(self.device, self.descriptor_pool, null);
@@ -238,11 +230,8 @@ pub const VulkanBackend = struct {
 
         if (self.descriptor_set_layout != .null_handle) self.vkd.destroyDescriptorSetLayout(self.device, self.descriptor_set_layout, null);
 
-        if (self.index_buffer != .null_handle) self.vkd.destroyBuffer(self.device, self.index_buffer, null);
-        if (self.index_buffer_memory != .null_handle) self.vkd.freeMemory(self.device, self.index_buffer_memory, null);
-
-        if (self.vertex_buffer != .null_handle) self.vkd.destroyBuffer(self.device, self.vertex_buffer, null);
-        if (self.vertex_buffer_memory != .null_handle) self.vkd.freeMemory(self.device, self.vertex_buffer_memory, null);
+        self.freeBuffer(self.index_buffer_handle);
+        self.freeBuffer(self.vertex_buffer_handle);
 
         if (self.render_finished_semaphores != null) {
             for (self.render_finished_semaphores.?) |semaphore| {
@@ -272,8 +261,6 @@ pub const VulkanBackend = struct {
 
         if (self.surface != .null_handle) self.vki.destroySurfaceKHR(self.instance, self.surface, null);
         if (self.instance != .null_handle) self.vki.destroyInstance(self.instance, null);
-
-        // self.window.deinit();
     }
 
     fn recreateSwapChain(self: *Self) !void {
@@ -295,7 +282,6 @@ pub const VulkanBackend = struct {
     }
 
     fn createInstance(self: *Self) !void {
-        // const vk_proc = @ptrCast(*const fn (instance: vk.Instance, procname: [*:0]const u8) callconv(.C) vk.PfnVoidFunction, &glfw.getInstanceProcAddress);
         const vk_proc = @ptrCast(*const fn (instance: vk.Instance, procname: [*:0]const u8) callconv(.C) vk.PfnVoidFunction, &GlfwWindow.getInstanceProcAddress);
         self.vkb = try BaseDispatch.load(vk_proc);
 
@@ -812,22 +798,19 @@ pub const VulkanBackend = struct {
 
         const image_size: vk.DeviceSize = @intCast(u64, tex_width) * @intCast(u64, tex_height) * 4;
 
-        var staging_buffer: vk.Buffer = undefined;
-        var staging_buffer_memory: vk.DeviceMemory = undefined;
-        try self.createBuffer(image_size, .{ .transfer_src_bit = true }, .{ .host_visible_bit = true, .host_coherent_bit = true }, &staging_buffer, &staging_buffer_memory);
+        const staging_buf_handle = try self.createBuffer(image_size, .{ .transfer_src_bit = true }, .{ .host_visible_bit = true, .host_coherent_bit = true });
+        const staging_buffer     = self.getBuffer(staging_buf_handle);
+        defer self.freeBuffer(staging_buf_handle);
 
-        const data = try self.vkd.mapMemory(self.device, staging_buffer_memory, 0, image_size, .{});
+        const data = try self.vkd.mapMemory(self.device, staging_buffer.mem, 0, image_size, .{});
         std.mem.copy(u8, @ptrCast([*]u8, data.?)[0..image_size], pixels[0..image_size]);
-        self.vkd.unmapMemory(self.device, staging_buffer_memory);
+        self.vkd.unmapMemory(self.device, staging_buffer.mem);
 
         try self.createImage(@intCast(u32, tex_width), @intCast(u32, tex_height), .r8g8b8a8_srgb, .optimal, .{ .transfer_dst_bit = true, .sampled_bit = true }, .{ .device_local_bit = true }, &self.texture_image, &self.texture_image_memory);
 
         try self.transitionImageLayout(self.texture_image, .r8g8b8a8_srgb, .@"undefined", .transfer_dst_optimal);
-        try self.copyBufferToImage(staging_buffer, self.texture_image, @intCast(u32, tex_width), @intCast(u32, tex_height));
+        try self.copyBufferToImage(staging_buffer.buf, self.texture_image, @intCast(u32, tex_width), @intCast(u32, tex_height));
         try self.transitionImageLayout(self.texture_image, .r8g8b8a8_srgb, .transfer_dst_optimal, .shader_read_only_optimal);
-
-        self.vkd.destroyBuffer(self.device, staging_buffer, null);
-        self.vkd.freeMemory(self.device, staging_buffer_memory, null);
     }
 
     fn createTextureImageView(self: *Self) !void {
@@ -979,50 +962,45 @@ pub const VulkanBackend = struct {
     fn createVertexBuffer(self: *Self) !void {
         const buffer_size: vk.DeviceSize = @sizeOf(@TypeOf(quad.vertices));
 
-        var staging_buffer: vk.Buffer = undefined;
-        var staging_buffer_memory: vk.DeviceMemory = undefined;
-        try createBuffer(self, buffer_size, .{ .transfer_src_bit = true }, .{ .host_visible_bit = true, .host_coherent_bit = true }, &staging_buffer, &staging_buffer_memory);
+        const staging_buffer_handle = try createBuffer(self, buffer_size, .{ .transfer_src_bit = true }, .{ .host_visible_bit = true, .host_coherent_bit = true });
+        const staging_buffer = self.getBuffer(staging_buffer_handle);
+        defer self.freeBuffer(staging_buffer_handle);
 
-        const data = try self.vkd.mapMemory(self.device, staging_buffer_memory, 0, buffer_size, .{});
+        const data = try self.vkd.mapMemory(self.device, staging_buffer.mem, 0, buffer_size, .{});
         std.mem.copy(u8, @ptrCast([*]u8, data.?)[0..buffer_size], std.mem.sliceAsBytes(&quad.vertices));
-        self.vkd.unmapMemory(self.device, staging_buffer_memory);
+        self.vkd.unmapMemory(self.device, staging_buffer.mem);
 
-        try createBuffer(self, buffer_size, .{ .transfer_dst_bit = true, .vertex_buffer_bit = true }, .{ .device_local_bit = true }, &self.vertex_buffer, &self.vertex_buffer_memory);
+        self.vertex_buffer_handle = try createBuffer(self, buffer_size, .{ .transfer_dst_bit = true, .vertex_buffer_bit = true }, .{ .device_local_bit = true });
+        const vertex_buffer = self.getBuffer(self.vertex_buffer_handle);
 
-        try copyBuffer(self, staging_buffer, self.vertex_buffer, buffer_size);
-
-        self.vkd.destroyBuffer(self.device, staging_buffer, null);
-        self.vkd.freeMemory(self.device, staging_buffer_memory, null);
+        try copyBuffer(self, staging_buffer.buf, vertex_buffer.buf, buffer_size);
     }
 
     fn createIndexBuffer(self: *Self) !void {
         const buffer_size: vk.DeviceSize = @sizeOf(@TypeOf(quad.indices));
 
-        var staging_buffer: vk.Buffer = undefined;
-        var staging_buffer_memory: vk.DeviceMemory = undefined;
-        try createBuffer(self, buffer_size, .{ .transfer_src_bit = true }, .{ .host_visible_bit = true, .host_coherent_bit = true }, &staging_buffer, &staging_buffer_memory);
+        const staging_buffer_handle = try createBuffer(self, buffer_size, .{ .transfer_src_bit = true }, .{ .host_visible_bit = true, .host_coherent_bit = true });
+        const staging_buffer = self.getBuffer(staging_buffer_handle);
+        defer self.freeBuffer(staging_buffer_handle);
 
-        const data = try self.vkd.mapMemory(self.device, staging_buffer_memory, 0, buffer_size, .{});
+        const data = try self.vkd.mapMemory(self.device, staging_buffer.mem, 0, buffer_size, .{});
         std.mem.copy(u8, @ptrCast([*]u8, data.?)[0..buffer_size], std.mem.sliceAsBytes(&quad.indices));
-        self.vkd.unmapMemory(self.device, staging_buffer_memory);
+        self.vkd.unmapMemory(self.device, staging_buffer.mem);
 
-        try createBuffer(self, buffer_size, .{ .transfer_dst_bit = true, .index_buffer_bit = true }, .{ .device_local_bit = true }, &self.index_buffer, &self.index_buffer_memory);
+        self.index_buffer_handle = try createBuffer(self, buffer_size, .{ .transfer_dst_bit = true, .index_buffer_bit = true }, .{ .device_local_bit = true });
+        const index_buffer = self.getBuffer(self.index_buffer_handle);
 
-        try copyBuffer(self, staging_buffer, self.index_buffer, buffer_size);
-
-        self.vkd.destroyBuffer(self.device, staging_buffer, null);
-        self.vkd.freeMemory(self.device, staging_buffer_memory, null);
+        try copyBuffer(self, staging_buffer.buf, index_buffer.buf, buffer_size);
     }
 
     fn createUniformBuffers(self: *Self) !void {
         const buffer_size: vk.DeviceSize = @sizeOf(render_types.UniformBufferObject);
 
-        self.uniform_buffers = try self.allocator.alloc(vk.Buffer, MAX_FRAMES_IN_FLIGHT);
-        self.uniform_buffers_memory = try self.allocator.alloc(vk.DeviceMemory, MAX_FRAMES_IN_FLIGHT);
+        self.uniform_buffer_handles = try self.allocator.alloc(ResourceHandle, MAX_FRAMES_IN_FLIGHT);
 
         var i: usize = 0;
         while (i < MAX_FRAMES_IN_FLIGHT) : (i += 1) {
-            try self.createBuffer(buffer_size, .{ .uniform_buffer_bit = true }, .{ .host_visible_bit = true, .host_coherent_bit = true }, &self.uniform_buffers.?[i], &self.uniform_buffers_memory.?[i]);
+            self.uniform_buffer_handles.?[i] = try self.createBuffer(buffer_size, .{ .uniform_buffer_bit = true }, .{ .host_visible_bit = true, .host_coherent_bit = true });
         }
     }
 
@@ -1058,8 +1036,10 @@ pub const VulkanBackend = struct {
         try self.vkd.allocateDescriptorSets(self.device, &alloc_info, self.descriptor_sets.?.ptr);
 
         for (self.descriptor_sets.?, 0..) |descriptor_set, i| {
+            const buffer = self.getBuffer(self.uniform_buffer_handles.?[i]);
             const buffer_info = [_]vk.DescriptorBufferInfo{.{
-                .buffer = self.uniform_buffers.?[i],
+                // .buffer = self.uniform_buffers.?[i],
+                .buffer = buffer.buf,
                 .offset = 0,
                 .range = @sizeOf(render_types.UniformBufferObject),
             }};
@@ -1097,8 +1077,12 @@ pub const VulkanBackend = struct {
         }
     }
 
-    fn createBuffer(self: *Self, size: vk.DeviceSize, usage: vk.BufferUsageFlags, properties: vk.MemoryPropertyFlags, buffer: *vk.Buffer, buffer_memory: *vk.DeviceMemory) !void {
-        buffer.* = try self.vkd.createBuffer(self.device, &.{
+    fn createBuffer(self: *Self, size: vk.DeviceSize, usage: vk.BufferUsageFlags, properties: vk.MemoryPropertyFlags) !ResourceHandle {
+        Logger.debug("create buffer '{}'\n", .{ self.buffer_count });
+
+        assert(self.buffer_count <= MAX_BUFFERS);
+
+        const buffer = try self.vkd.createBuffer(self.device, &.{
             .flags = .{},
             .size = size,
             .usage = usage,
@@ -1107,14 +1091,49 @@ pub const VulkanBackend = struct {
             .p_queue_family_indices = undefined,
         }, null);
 
-        const mem_requirements = self.vkd.getBufferMemoryRequirements(self.device, buffer.*);
+        const mem_requirements = self.vkd.getBufferMemoryRequirements(self.device, buffer);
 
-        buffer_memory.* = try self.vkd.allocateMemory(self.device, &.{
+        const buffer_memory = try self.vkd.allocateMemory(self.device, &.{
             .allocation_size = mem_requirements.size,
             .memory_type_index = try self.findMemoryType(mem_requirements.memory_type_bits, properties),
         }, null);
-        try self.vkd.bindBufferMemory(self.device, buffer.*, buffer_memory.*, 0);
+        try self.vkd.bindBufferMemory(self.device, buffer, buffer_memory, 0);
+
+        self.buffers[self.buffer_count] = buffer;
+        self.buffer_mems[self.buffer_count] = buffer_memory;
+        defer self.buffer_count += 1;
+
+        return ResourceHandle { .value = self.buffer_count };
     }
+
+    fn freeBuffer(self: *Self, handle: ResourceHandle) void {
+        Logger.debug("free buffer '{}'\n", .{ handle.value });
+
+        const buffer = self.getBuffer(handle);
+        self.vkd.destroyBuffer(self.device, buffer.buf, null);
+        self.vkd.freeMemory(self.device,    buffer.mem, null);
+    }
+
+    fn getBuffer(self: *Self, handle: ResourceHandle) Buffer {
+        assert(self.buffers[handle.value]     != .null_handle);
+        assert(self.buffer_mems[handle.value] != .null_handle);
+
+        return Buffer {
+            .buf = self.buffers[handle.value],
+            .mem = self.buffer_mems[handle.value],
+        };
+    }
+
+    // fn addResourceHandle(arr: []ResourceHandle, handle: ResourceHandle) ResourceHandle {
+    //     const next_idx = for (arr, 0..) |a, idx| {
+    //         if (a.eql(&ResourceHandle.invalid)) {
+    //             break idx;
+    //         }
+    //     } else unreachable;
+    //
+    //     arr[next_idx] = handle;
+    //     return ResourceHandle {.value = next_idx };
+    // }
 
     fn beginSingleTimeCommands(self: *Self) !vk.CommandBuffer {
         const alloc_info = vk.CommandBufferAllocateInfo{
@@ -1230,11 +1249,11 @@ pub const VulkanBackend = struct {
             }};
             self.vkd.cmdSetScissor(command_buffer, 0, scissors.len, &scissors);
 
-            const vertex_buffers = [_]vk.Buffer{self.vertex_buffer};
+            const vertex_buffers = [_]vk.Buffer{self.getBuffer(self.vertex_buffer_handle).buf};
             const offsets = [_]vk.DeviceSize{0};
             self.vkd.cmdBindVertexBuffers(command_buffer, 0, 1, &vertex_buffers, &offsets);
 
-            self.vkd.cmdBindIndexBuffer(command_buffer, self.index_buffer, 0, vk.IndexType.uint16);
+            self.vkd.cmdBindIndexBuffer(command_buffer, self.getBuffer(self.index_buffer_handle).buf, 0, vk.IndexType.uint16);
 
             self.vkd.cmdBindDescriptorSets(command_buffer, .graphics, self.pipeline_layout, 0, 1, @ptrCast([*]const vk.DescriptorSet, &self.descriptor_sets.?[self.current_frame]), 0, undefined);
 
@@ -1268,9 +1287,10 @@ pub const VulkanBackend = struct {
         };
         ubo.proj.data[1][1] *= -1;
 
-        const data = try self.vkd.mapMemory(self.device, self.uniform_buffers_memory.?[current_image], 0, @sizeOf(render_types.UniformBufferObject), .{});
+        const buffer = self.getBuffer(self.uniform_buffer_handles.?[current_image]);
+        const data = try self.vkd.mapMemory(self.device, buffer.mem, 0, @sizeOf(render_types.UniformBufferObject), .{});
         std.mem.copy(u8, @ptrCast([*]u8, data.?)[0..@sizeOf(render_types.UniformBufferObject)], std.mem.asBytes(&ubo));
-        self.vkd.unmapMemory(self.device, self.uniform_buffers_memory.?[current_image]);
+        self.vkd.unmapMemory(self.device, buffer.mem);
     }
 
     pub fn drawFrame(self: *Self) !void {
