@@ -5,8 +5,8 @@ const vk = @import("vulkan");
 const za = @import("zalgebra");
 const resources = @import("resources");
 const log = @import("../core/log.zig");
-const logger = log.scoped(.hell);
-const GlfwWindow = @import("../window.zig").GlfwWindow;
+const Logger = log.scoped(.hell);
+const GlfwWindow = @import("../glfw_window.zig");
 const InstanceDispatch = @import("dispatch.zig").InstanceDispatch;
 const BaseDispatch = @import("dispatch.zig").BaseDispatch;
 const DeviceDispatch = @import("dispatch.zig").DeviceDispatch;
@@ -118,7 +118,7 @@ pub const VulkanBackend = struct {
     const Self = @This();
     allocator: Allocator,
 
-    window: GlfwWindow = undefined,
+    window: *GlfwWindow = undefined,
 
     vkb: BaseDispatch = undefined,
     vki: InstanceDispatch = undefined,
@@ -179,15 +179,18 @@ pub const VulkanBackend = struct {
 
     start_time: std.time.Instant,
 
-    pub fn init(allocator: Allocator) !Self {
-        return Self{ .allocator = allocator, .start_time = try std.time.Instant.now() };
+    pub fn init(allocator: Allocator, window: *GlfwWindow) !Self {
+        return Self{
+            .allocator = allocator,
+            .start_time = try std.time.Instant.now(),
+            .window = window,
+        };
     }
 
     pub fn run(self: *Self) !void {
-        self.window = try GlfwWindow.init(WIDTH, HEIGHT, APP_NAME);
 
         try self.initVulkan();
-        try self.mainLoop();
+        // try self.mainLoop();
     }
 
     fn initVulkan(self: *Self) !void {
@@ -216,13 +219,17 @@ pub const VulkanBackend = struct {
         try self.createSyncObjects();
     }
 
-    fn mainLoop(self: *Self) !void {
-        while (!self.window.shouldClose()) {
-            GlfwWindow.pollEvents();
-            try self.drawFrame();
-        }
+    // fn mainLoop(self: *Self) !void {
+    //     while (!self.window.shouldClose()) {
+    //         GlfwWindow.pollEvents();
+    //         try self.drawFrame();
+    //     }
+    //
+    //     _ = try self.vkd.deviceWaitIdle(self.device);
+    // }
 
-        _ = try self.vkd.deviceWaitIdle(self.device);
+    pub fn waitDeviceIdle(self: *VulkanBackend) !void {
+        try self.vkd.deviceWaitIdle(self.device);
     }
 
     fn cleanupSwapChain(self: *Self) void {
@@ -258,6 +265,8 @@ pub const VulkanBackend = struct {
     }
 
     pub fn deinit(self: *Self) void {
+        Logger.info("deinitializing vulkan backend\n", .{});
+
         self.cleanupSwapChain();
 
         if (self.graphics_pipeline != .null_handle) self.vkd.destroyPipeline(self.device, self.graphics_pipeline, null);
@@ -323,7 +332,7 @@ pub const VulkanBackend = struct {
         if (self.surface != .null_handle) self.vki.destroySurfaceKHR(self.instance, self.surface, null);
         if (self.instance != .null_handle) self.vki.destroyInstance(self.instance, null);
 
-        self.window.deinit();
+        // self.window.deinit();
     }
 
     fn recreateSwapChain(self: *Self) !void {
@@ -1323,7 +1332,7 @@ pub const VulkanBackend = struct {
         self.vkd.unmapMemory(self.device, self.uniform_buffers_memory.?[current_image]);
     }
 
-    fn drawFrame(self: *Self) !void {
+    pub fn drawFrame(self: *Self) !void {
         _ = try self.vkd.waitForFences(self.device, 1, @ptrCast([*]const vk.Fence, &self.in_flight_fences.?[self.current_frame]), vk.TRUE, std.math.maxInt(u64));
 
         const result = self.vkd.acquireNextImageKHR(self.device, self.swap_chain, std.math.maxInt(u64), self.image_available_semaphores.?[self.current_frame], .null_handle) catch |err| switch (err) {
@@ -1556,17 +1565,16 @@ pub const VulkanBackend = struct {
     }
 
     fn debugCallback(severity: vk.DebugUtilsMessageSeverityFlagsEXT, _: vk.DebugUtilsMessageTypeFlagsEXT, p_callback_data: ?*const vk.DebugUtilsMessengerCallbackDataEXT, _: ?*anyopaque) callconv(vk.vulkan_call_conv) vk.Bool32 {
-        _ = severity;
         if (p_callback_data != null) {
-            // const log_level = switch (severity) {
-            //     .verbose_bit_ext => log.LogLevel.debug,
-            //     .info_bit_ext    => log.LogLevel.info,
-            //     .warning_bit_ext => log.LogLevel.warn,
-            //     .error_bit_ext   => log.LogLevel.err,
-            // };
-            //
-            // log.log(log_level, "validation layer: {s}", .{p_callback_data.message});
-            logger.debug("validation layer: {s}\n", .{p_callback_data.?.p_message});
+            if (severity.verbose_bit_ext) {
+                Logger.debug("VK-Layer: {s}\n", .{p_callback_data.?.p_message});
+            } else if (severity.info_bit_ext) {
+                Logger.info("VK-Layer: {s}\n", .{p_callback_data.?.p_message});
+            } else if (severity.warning_bit_ext) {
+                Logger.warn("VK-Layer: {s}\n", .{p_callback_data.?.p_message});
+            } else {
+                Logger.err("VK-Layer: {s}\n", .{p_callback_data.?.p_message});
+            }
         }
 
         return vk.FALSE;
