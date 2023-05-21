@@ -5,6 +5,7 @@ const GlfwWindow    = @import("../GlfwWindow.zig");
 const render_types  = @import("render_types.zig");
 const Mesh          = render_types.Mesh;
 const Vertex        = render_types.Vertex;
+const RenderData    = render_types.RenderData;
 
 
 
@@ -12,36 +13,41 @@ const Vertex        = render_types.Vertex;
 pub const RendererFrontend = struct {
     backend: VulkanBackend = undefined,
     mesh: Mesh = undefined,
+    render_data: RenderData = RenderData{},
 
 
     pub fn init(allocator: std.mem.Allocator, window: *GlfwWindow) !RendererFrontend {
         Logger.info("Initializing renderer frontend", .{});
 
-        var self = RendererFrontend {
-            .mesh = RendererFrontend.createQuadMesh(),
-        };
+        var self = RendererFrontend { };
 
         self.backend = try VulkanBackend.init(allocator, window);
-        _ = try self.backend.createVertexBuffer(self.mesh.vertices[0..]);
-        _ = try self.backend.createIndexBuffer (self.mesh.indices[0..]);
+
+        self.mesh = try self.createQuadMesh();
+
+        self.render_data = RenderData {};
+        self.render_data.addMesh(&self.mesh);
+
         return self;
     }
 
     pub fn deinit(self: *RendererFrontend) void {
-        Logger.info("Deinitializing renderer frontend\n", .{});
+        Logger.info("deinitializing renderer frontend\n", .{});
+        self.backend.freeBuffer(self.mesh.vertex_buffer);
+        self.backend.freeBuffer(self.mesh.index_buffer);
         self.backend.deinit();
     }
 
     pub fn drawFrame(self: *RendererFrontend) !void {
-        try self.backend.drawFrame(&self.mesh);
+        try self.backend.drawFrame(&self.render_data);
     }
 
     pub fn deviceWaitIdle(self: *RendererFrontend) !void {
         try self.backend.waitDeviceIdle();
     }
 
-    pub fn createQuadMesh() Mesh {
-        return Mesh {
+    pub fn createQuadMesh(self: *RendererFrontend) !Mesh {
+        var mesh = Mesh {
             .vertices = [_]Vertex {
                 .{ .pos = .{ -0.5, -0.5, 0.0 }, .color = .{ 1, 0, 0 }, .tex_coord = .{ 0, 0 } },
                 .{ .pos = .{ 0.5, -0.5, 0.0 }, .color = .{ 0, 1, 0 }, .tex_coord = .{ 1, 0 } },
@@ -59,5 +65,10 @@ pub const RendererFrontend = struct {
                 4, 5, 6, 6, 7, 4, //
             },
         };
+
+        mesh.vertex_buffer = try self.backend.createVertexBuffer(mesh.vertices[0..]);
+        mesh.index_buffer  = try self.backend.createIndexBuffer (mesh.indices[0..]);
+
+        return mesh;
     }
 };

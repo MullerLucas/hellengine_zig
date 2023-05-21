@@ -1,5 +1,10 @@
-const vk = @import("vulkan");
-const za = @import("zalgebra");
+const std = @import("std");
+const vk  = @import("vulkan");
+const za  = @import("zalgebra");
+const core_types = @import("../core/core_types.zig");
+const ResourceHandle = core_types.ResourceHandle;
+
+const assert = std.debug.assert;
 
 // ----------------------------------------------
 
@@ -53,7 +58,23 @@ pub const Vertex = struct {
 pub const Mesh = struct{
     vertices: [8]Vertex,
     indices : [12]u16,
+    vertex_buffer: ResourceHandle = ResourceHandle.invalid,
+    index_buffer:  ResourceHandle = ResourceHandle.invalid,
+};
 
+// ----------------------------------------------
+
+pub const RenderData = struct {
+    pub const DATA_LIMIT: usize = 1024;
+    count: usize = 0,
+    meshes: [DATA_LIMIT]*Mesh = undefined,
+
+    pub fn addMesh(self: *RenderData, mesh: *Mesh) void {
+        assert(self.count < RenderData.DATA_LIMIT);
+
+        self.meshes[self.count] = mesh;
+        self.count += 1;
+    }
 };
 
 // ----------------------------------------------
