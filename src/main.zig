@@ -1,16 +1,24 @@
 const std = @import("std");
-const RendererFrontend = @import("render/renderer_frontend.zig").RendererFrontend;
-const Logger = @import("core/log.zig").scoped(.app);
+
+
+const core   = @import("./core/core.zig");
+const Logger = core.log.scoped(.app);
+
+const render   = @import("render/render.zig");
+const Renderer = render.Renderer;
+
 const GlfwWindow = @import("GlfwWindow.zig");
 
-const TestScene = @import("test_scene.zig").TestScene;
+const app       = @import("app.zig");
+const TestScene = app.TestScene;
 
+// ----------------------------------------------
 
-const APP_NAME = "hell-app";
-const WIDTH: u32 = 800;
+const APP_NAME    = "hell-app";
+const WIDTH:  u32 = 800;
 const HEIGHT: u32 = 600;
 
-
+// ----------------------------------------------
 
 pub fn main() !void {
     Logger.info("starting appliation\n", .{});
@@ -25,7 +33,7 @@ pub fn main() !void {
     var window = try GlfwWindow.init(WIDTH, HEIGHT, APP_NAME);
     defer window.deinit();
 
-    var renderer = RendererFrontend.init(allocator, &window) catch |err| {
+    var renderer = Renderer.init(allocator, &window) catch |err| {
         Logger.err("application failed to init with error: {any}", .{err});
         return;
     };

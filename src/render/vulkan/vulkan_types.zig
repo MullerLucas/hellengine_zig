@@ -1,11 +1,15 @@
-const vk = @import("vulkan");
-const config = @import("vulkan_config.zig");
+const std    = @import("std");
+const vk     = @import("vulkan");
+const config = @import("../../config.zig");
 
+// ----------------------------------------------
 
 pub const BaseDispatch = vk.BaseWrapper(.{
     .createInstance = true,
     .enumerateInstanceLayerProperties = true,
 });
+
+// ----------------------------------------------
 
 pub const InstanceDispatch = vk.InstanceWrapper(.{
     .createDebugUtilsMessengerEXT = config.enable_validation_layers,
@@ -26,6 +30,8 @@ pub const InstanceDispatch = vk.InstanceWrapper(.{
     .getPhysicalDeviceSurfacePresentModesKHR = true,
     .getPhysicalDeviceSurfaceSupportKHR = true,
 });
+
+// ----------------------------------------------
 
 pub const DeviceDispatch = vk.DeviceWrapper(.{
     .acquireNextImageKHR = true,
@@ -97,3 +103,13 @@ pub const DeviceDispatch = vk.DeviceWrapper(.{
     .waitForFences = true,
 });
 
+// ----------------------------------------------
+
+pub const Buffer = struct {
+    buf: vk.Buffer,
+    mem: vk.DeviceMemory,
+};
+
+pub const BufferList = std.MultiArrayList(Buffer);
+
+// ----------------------------------------------

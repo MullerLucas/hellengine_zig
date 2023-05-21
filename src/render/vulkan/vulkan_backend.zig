@@ -4,25 +4,24 @@ const Allocator = std.mem.Allocator;
 
 const vk               = @import("vulkan");
 const za               = @import("zalgebra");
-const resources        = @import("resources");
-const log              = @import("../core/log.zig");
-const Logger           = log.scoped(.vulkan);
-const GlfwWindow       = @import("../GlfwWindow.zig");
-const InstanceDispatch = @import("dispatch.zig").InstanceDispatch;
-const BaseDispatch     = @import("dispatch.zig").BaseDispatch;
-const DeviceDispatch   = @import("dispatch.zig").DeviceDispatch;
-const config           = @import("vulkan_config.zig");
-const render_types     = @import("../render/render_types.zig");
-const Mesh             = render_types.Mesh;
-const Vertex           = render_types.Vertex;
-const RenderData       = render_types.RenderData;
 
-const vulkan_types = @import("vulkan_types.zig");
-const Buffer = vulkan_types.Buffer;
-const BufferList = vulkan_types.BufferList;
+const GlfwWindow       = @import("../../GlfwWindow.zig");
 
-const core_types = @import("../core/core_types.zig");
-const ResourceHandle = core_types.ResourceHandle;
+const config    = @import("../../config.zig");
+const resources = @import("resources");
+
+const core           = @import("../../core/core.zig");
+const ResourceHandle = core.ResourceHandle;
+const Logger         = core.log.scoped(.vulkan);
+
+const render              = @import("../render.zig");
+const Vertex              = render.Vertex;
+const RenderData          = render.RenderData;
+const UniformBufferObject = render.UniformBufferObject;
+
+const vulkan    = @import("./vulkan.zig");
+const Buffer     = vulkan.Buffer;
+const BufferList = vulkan.BufferList;
 
 const c = @cImport({
     @cInclude("stb_image.h");
@@ -30,8 +29,8 @@ const c = @cImport({
 
 // ----------------------------------------------
 
-const APP_NAME = "hell-app";
-const WIDTH: u32 = 800;
+const APP_NAME    = "hell-app";
+const WIDTH:  u32 = 800;
 const HEIGHT: u32 = 600;
 const MAX_FRAMES_IN_FLIGHT: u32 = 2;
 const validation_layers = [_][*:0]const u8{"VK_LAYER_KHRONOS_validation"};
@@ -73,9 +72,9 @@ pub const VulkanBackend = struct {
 
     window: *GlfwWindow = undefined,
 
-    vkb: BaseDispatch = undefined,
-    vki: InstanceDispatch = undefined,
-    vkd: DeviceDispatch = undefined,
+    vkb: vulkan.BaseDispatch     = undefined,
+    vki: vulkan.InstanceDispatch = undefined,
+    vkd: vulkan.DeviceDispatch   = undefined,
 
     instance: vk.Instance = .null_handle,
     debug_messenger: vk.DebugUtilsMessengerEXT = .null_handle,
@@ -277,7 +276,7 @@ pub const VulkanBackend = struct {
 
     fn createInstance(self: *Self) !void {
         const vk_proc = @ptrCast(*const fn (instance: vk.Instance, procname: [*:0]const u8) callconv(.C) vk.PfnVoidFunction, &GlfwWindow.getInstanceProcAddress);
-        self.vkb = try BaseDispatch.load(vk_proc);
+        self.vkb = try vulkan.BaseDispatch.load(vk_proc);
 
         if (config.enable_validation_layers and !try self.checkValidationLayerSupport()) {
             return error.MissingValidationLayer;
@@ -314,7 +313,7 @@ pub const VulkanBackend = struct {
 
         self.instance = try self.vkb.createInstance(&create_info, null);
 
-        self.vki = try InstanceDispatch.load(self.instance, vk_proc);
+        self.vki = try vulkan.InstanceDispatch.load(self.instance, vk_proc);
     }
 
     fn populateDebugMessengerCreateInfo(create_info: *vk.DebugUtilsMessengerCreateInfoEXT) void {
@@ -415,7 +414,7 @@ pub const VulkanBackend = struct {
 
         self.device = try self.vki.createDevice(self.physical_device, &create_info, null);
 
-        self.vkd = try DeviceDispatch.load(self.device, self.vki.dispatch.vkGetDeviceProcAddr);
+        self.vkd = try vulkan.DeviceDispatch.load(self.device, self.vki.dispatch.vkGetDeviceProcAddr);
 
         self.graphics_queue = self.vkd.getDeviceQueue(self.device, indices.graphics_family.?, 0);
         self.present_queue = self.vkd.getDeviceQueue(self.device, indices.present_family.?, 0);
@@ -596,7 +595,7 @@ pub const VulkanBackend = struct {
             },
         };
 
-        const binding_description = Vertex.getBindingDescription();
+        const binding_description    = Vertex.getBindingDescription();
         const attribute_descriptions = Vertex.getAttributeDescriptions();
 
         const vertex_input_info = vk.PipelineVertexInputStateCreateInfo{
@@ -994,7 +993,7 @@ pub const VulkanBackend = struct {
     }
 
     fn createUniformBuffers(self: *Self) !void {
-        const buffer_size: vk.DeviceSize = @sizeOf(render_types.UniformBufferObject);
+        const buffer_size: vk.DeviceSize = @sizeOf(UniformBufferObject);
 
         self.uniform_buffer_handles = try self.allocator.alloc(ResourceHandle, MAX_FRAMES_IN_FLIGHT);
 
@@ -1041,7 +1040,7 @@ pub const VulkanBackend = struct {
                 // .buffer = self.uniform_buffers.?[i],
                 .buffer = buffer.buf,
                 .offset = 0,
-                .range = @sizeOf(render_types.UniformBufferObject),
+                .range = @sizeOf(UniformBufferObject),
             }};
 
             const image_info = [_]vk.DescriptorImageInfo{.{
@@ -1265,7 +1264,7 @@ pub const VulkanBackend = struct {
     fn updateUniformBuffer(self: *Self, current_image: u32) !void {
         const time: f32 = (@intToFloat(f32, (try std.time.Instant.now()).since(self.start_time)) / @intToFloat(f32, std.time.ns_per_s));
 
-        var ubo = render_types.UniformBufferObject{
+        var ubo = UniformBufferObject{
             .model = za.Mat4.identity().rotate(time * 90.0, za.Vec3.new(0.0, 0.0, 1.0)),
             .view = za.lookAt(za.Vec3.new(2, 2, 2), za.Vec3.new(0, 0, 0), za.Vec3.new(0, 0, 1)),
             .proj = za.perspective(45.0, @intToFloat(f32, self.swap_chain_extent.width) / @intToFloat(f32, self.swap_chain_extent.height), 0.1, 10),
@@ -1273,8 +1272,8 @@ pub const VulkanBackend = struct {
         ubo.proj.data[1][1] *= -1;
 
         const buffer = self.getBuffer(self.uniform_buffer_handles.?[current_image]);
-        const data = try self.vkd.mapMemory(self.device, buffer.mem, 0, @sizeOf(render_types.UniformBufferObject), .{});
-        std.mem.copy(u8, @ptrCast([*]u8, data.?)[0..@sizeOf(render_types.UniformBufferObject)], std.mem.asBytes(&ubo));
+        const data = try self.vkd.mapMemory(self.device, buffer.mem, 0, @sizeOf(UniformBufferObject), .{});
+        std.mem.copy(u8, @ptrCast([*]u8, data.?)[0..@sizeOf(UniformBufferObject)], std.mem.asBytes(&ubo));
         self.vkd.unmapMemory(self.device, buffer.mem);
     }
 

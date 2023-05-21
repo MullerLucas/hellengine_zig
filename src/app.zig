@@ -1,20 +1,23 @@
-const std              = @import("std");
-const RendererFrontend = @import("render/renderer_frontend.zig").RendererFrontend;
-const render_types     = @import("render/render_types.zig");
-const Mesh             = render_types.Mesh;
-const MeshList         = render_types.MeshList;
-const Vertex           = render_types.Vertex;
-const RenderData       = render_types.RenderData;
-const Logger           = @import("core/log.zig").scoped(.app);
+const std = @import("std");
 
+const render     = @import("./render/render.zig");
+const Renderer   = render.Renderer;
+const Mesh       = render.Mesh;
+const MeshList   = render.MeshList;
+const RenderData = render.RenderData;
+const Vertex     = render.Vertex;
 
+const core   = @import("./core/core.zig");
+const Logger = core.log.scoped(.app);
+
+// ----------------------------------------------g
 
 pub const TestScene = struct {
-    renderer: *RendererFrontend,
+    renderer: *Renderer,
     meshes: MeshList,
     render_data: RenderData,
 
-    pub fn init(allocator: std.mem.Allocator, renderer: *RendererFrontend) !TestScene {
+    pub fn init(allocator: std.mem.Allocator, renderer: *Renderer) !TestScene {
         Logger.info("initializing test-scene\n", .{});
 
         var self = TestScene {
