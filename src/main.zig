@@ -42,6 +42,8 @@ pub fn main() !void {
     var scene = try TestScene.init(allocator, &renderer);
     defer scene.deinit();
 
+    try renderer.late_init(scene.render_data.meshes[0].texture);
+
     // var app = VulkanBackend.init(allocator) catch |err| {
     //     std.log.err("application failed to init with error: {any}", .{err});
     //     return;

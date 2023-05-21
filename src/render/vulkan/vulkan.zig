@@ -6,4 +6,8 @@ pub const InstanceDispatch = vulkan_types.InstanceDispatch;
 pub const DeviceDispatch   = vulkan_types.DeviceDispatch;
 pub const Buffer           = vulkan_types.Buffer;
 pub const BufferList       = vulkan_types.BufferList;
+pub const Image            = vulkan_types.Image;
+pub const ImageArrayList   = vulkan_types.ImageArrayList;
+
+pub const Logger = @import("../../core/log.zig").scoped(.vulkan);
 

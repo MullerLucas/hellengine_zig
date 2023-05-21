@@ -60,6 +60,7 @@ pub const Mesh = struct{
     indices : [6]u16,
     vertex_buffer: ResourceHandle = ResourceHandle.invalid,
     index_buffer:  ResourceHandle = ResourceHandle.invalid,
+    texture:       ResourceHandle = ResourceHandle.invalid,
 };
 
 pub const MeshList = std.ArrayList(Mesh);

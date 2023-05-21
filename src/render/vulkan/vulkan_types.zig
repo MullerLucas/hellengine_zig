@@ -106,10 +106,20 @@ pub const DeviceDispatch = vk.DeviceWrapper(.{
 // ----------------------------------------------
 
 pub const Buffer = struct {
-    buf: vk.Buffer,
     mem: vk.DeviceMemory,
+    buf: vk.Buffer,
 };
 
 pub const BufferList = std.MultiArrayList(Buffer);
+
+// ----------------------------------------------
+
+pub const Image = struct {
+    mem: vk.DeviceMemory,
+    img: vk.Image,
+    view: vk.ImageView = .null_handle,
+};
+
+pub const ImageArrayList = std.MultiArrayList(Image);
 
 // ----------------------------------------------

@@ -1,17 +1,18 @@
-const std           = @import("std");
+const std = @import("std");
 
 const GlfwWindow = @import("../GlfwWindow.zig");
 
 const core   = @import("../core/core.zig");
-const Logger = core.log.scoped(.render);
+const ResourceHandle = core.ResourceHandle;
 
 const vulkan        = @import("./vulkan/vulkan.zig");
 const VulkanBackend = vulkan.VulkanBackend;
 
 const render     = @import("render.zig");
+const Logger     = render.Logger;
 const RenderData = render.RenderData;
 
-
+// ----------------------------------------------
 
 pub const Renderer = struct {
     backend: VulkanBackend,
@@ -22,6 +23,10 @@ pub const Renderer = struct {
         return Renderer {
             .backend = try VulkanBackend.init(allocator, window),
         };
+    }
+
+    pub fn late_init(self: *Renderer, texture_image_handle: ResourceHandle) !void {
+        try self.backend.late_init(texture_image_handle);
     }
 
     pub fn deinit(self: *Renderer) void {
@@ -36,6 +41,5 @@ pub const Renderer = struct {
     pub fn deviceWaitIdle(self: *Renderer) !void {
         try self.backend.waitDeviceIdle();
     }
-
 };
 
