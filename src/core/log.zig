@@ -71,10 +71,10 @@ pub fn scoped(comptime scope: @TypeOf(.EnumLiteral)) type {
             nosuspend stderr.print(
                 comptime level.asColor().asFgStr() ++
                 level_txt ++
-                AnsiColor8.default.asBgStr() ++
                 scope_txt ++
                 ": " ++
-                format,
+                format ++
+                AnsiColor8.default.asFgStr(),
                 args
             ) catch return;
         }

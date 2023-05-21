@@ -1,7 +1,9 @@
 const std = @import("std");
 const RendererFrontend = @import("render/renderer_frontend.zig").RendererFrontend;
-const Logger = @import("core/log.zig").scoped(.hell);
+const Logger = @import("core/log.zig").scoped(.app);
 const GlfwWindow = @import("GlfwWindow.zig");
+
+const TestScene = @import("test_scene.zig").TestScene;
 
 
 const APP_NAME = "hell-app";
@@ -11,6 +13,8 @@ const HEIGHT: u32 = 600;
 
 
 pub fn main() !void {
+    Logger.info("starting appliation\n", .{});
+
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer {
         const leaked = gpa.deinit();
@@ -27,6 +31,9 @@ pub fn main() !void {
     };
     defer renderer.deinit();
 
+    var scene = try TestScene.init(allocator, &renderer);
+    defer scene.deinit();
+
     // var app = VulkanBackend.init(allocator) catch |err| {
     //     std.log.err("application failed to init with error: {any}", .{err});
     //     return;
@@ -39,9 +46,11 @@ pub fn main() !void {
 
     while (!window.shouldClose()) {
         GlfwWindow.pollEvents();
-        try renderer.drawFrame();
+        try renderer.drawFrame(&scene.render_data);
     }
 
     try renderer.deviceWaitIdle();
+
+    Logger.info("exiting appliation\n", .{});
 }
 

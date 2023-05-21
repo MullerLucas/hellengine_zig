@@ -56,24 +56,30 @@ pub const Vertex = struct {
 // ----------------------------------------------
 
 pub const Mesh = struct{
-    vertices: [8]Vertex,
-    indices : [12]u16,
+    vertices: [4]Vertex,
+    indices : [6]u16,
     vertex_buffer: ResourceHandle = ResourceHandle.invalid,
     index_buffer:  ResourceHandle = ResourceHandle.invalid,
 };
+
+pub const MeshList = std.ArrayList(Mesh);
 
 // ----------------------------------------------
 
 pub const RenderData = struct {
     pub const DATA_LIMIT: usize = 1024;
-    count: usize = 0,
+    len: usize = 0,
     meshes: [DATA_LIMIT]*Mesh = undefined,
 
     pub fn addMesh(self: *RenderData, mesh: *Mesh) void {
-        assert(self.count < RenderData.DATA_LIMIT);
+        assert(self.len < RenderData.DATA_LIMIT);
 
-        self.meshes[self.count] = mesh;
-        self.count += 1;
+        self.meshes[self.len] = mesh;
+        self.len += 1;
+    }
+
+    pub fn meshSlice(self: *const RenderData) []const *const Mesh {
+        return self.meshes[0..self.len];
     }
 };
 

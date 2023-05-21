@@ -1189,7 +1189,7 @@ pub const VulkanBackend = struct {
         }, self.command_buffers.?.ptr);
     }
 
-    fn recordCommandBuffer(self: *Self, command_buffer: vk.CommandBuffer, image_index: u32, mesh: *const Mesh) !void {
+    fn recordCommandBuffer(self: *Self, command_buffer: vk.CommandBuffer, image_index: u32, render_data: *const RenderData) !void {
         try self.vkd.beginCommandBuffer(command_buffer, &.{
             .flags = .{},
             .p_inheritance_info = null,
@@ -1231,15 +1231,18 @@ pub const VulkanBackend = struct {
             }};
             self.vkd.cmdSetScissor(command_buffer, 0, scissors.len, &scissors);
 
-            const vertex_buffers = [_]vk.Buffer{self.getBuffer(mesh.vertex_buffer).buf};
-            const offsets = [_]vk.DeviceSize{0};
-            self.vkd.cmdBindVertexBuffers(command_buffer, 0, 1, &vertex_buffers, &offsets);
+            for (render_data.meshSlice()) |mesh| {
+                const offsets = [_]vk.DeviceSize{0};
+                const vertex_buffers = [_]vk.Buffer{self.getBuffer(mesh.vertex_buffer).buf};
+                const index_buffer = self.getBuffer(mesh.index_buffer).buf;
+                const index_count = @intCast(u32, mesh.indices.len);
 
-            self.vkd.cmdBindIndexBuffer(command_buffer, self.getBuffer(mesh.index_buffer).buf, 0, vk.IndexType.uint16);
+                self.vkd.cmdBindVertexBuffers(command_buffer, 0, 1, &vertex_buffers, &offsets);
+                self.vkd.cmdBindIndexBuffer(command_buffer, index_buffer, 0, vk.IndexType.uint16);
+                self.vkd.cmdBindDescriptorSets(command_buffer, .graphics, self.pipeline_layout, 0, 1, @ptrCast([*]const vk.DescriptorSet, &self.descriptor_sets.?[self.current_frame]), 0, undefined);
 
-            self.vkd.cmdBindDescriptorSets(command_buffer, .graphics, self.pipeline_layout, 0, 1, @ptrCast([*]const vk.DescriptorSet, &self.descriptor_sets.?[self.current_frame]), 0, undefined);
-
-            self.vkd.cmdDrawIndexed(command_buffer, @intCast(u32, mesh.indices.len), 1, 0, 0, 0);
+                self.vkd.cmdDrawIndexed(command_buffer, index_count, 1, 0, 0, 0);
+            }
         }
         self.vkd.cmdEndRenderPass(command_buffer);
 
@@ -1295,7 +1298,7 @@ pub const VulkanBackend = struct {
         try self.vkd.resetFences(self.device, 1, @ptrCast([*]const vk.Fence, &self.in_flight_fences.?[self.current_frame]));
 
         try self.vkd.resetCommandBuffer(self.command_buffers.?[self.current_frame], .{});
-        try self.recordCommandBuffer(self.command_buffers.?[self.current_frame], result.image_index, render_data.meshes[0]);
+        try self.recordCommandBuffer(self.command_buffers.?[self.current_frame], result.image_index, render_data);
 
         const wait_semaphores = [_]vk.Semaphore{self.image_available_semaphores.?[self.current_frame]};
         const wait_stages = [_]vk.PipelineStageFlags{.{ .color_attachment_output_bit = true }};
