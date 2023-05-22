@@ -118,6 +118,7 @@ pub const Image = struct {
     mem: vk.DeviceMemory,
     img: vk.Image,
     view: vk.ImageView = .null_handle,
+    sampler: ?vk.Sampler = null,
 };
 
 pub const ImageArrayList = std.MultiArrayList(Image);

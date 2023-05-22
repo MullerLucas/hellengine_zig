@@ -102,21 +102,10 @@ pub const VulkanBackend = struct {
 
     command_pool: vk.CommandPool = .null_handle,
 
-    // depth_image: vk.Image = .null_handle,
-    // depth_image_memory: vk.DeviceMemory = .null_handle,
-    // depth_image_view: vk.ImageView = .null_handle,
-    depth_image_handle: ResourceHandle = ResourceHandle.invalid,
-
-    // texture_image: vk.Image = .null_handle,
-    // texture_image_memory: vk.DeviceMemory = .null_handle,
-    // texture_image_view: vk.ImageView = .null_handle,
-    texture_sampler: vk.Sampler = .null_handle,
-
-
-    // buffer stuff
     buffers: BufferList = BufferList{},
     uniform_buffer_handles: ?[]ResourceHandle = null,
     images: ImageArrayList = ImageArrayList{},
+    depth_image_handle: ResourceHandle = ResourceHandle.invalid,
 
     descriptor_pool: vk.DescriptorPool   = .null_handle,
     descriptor_sets: ?[]vk.DescriptorSet = null,
@@ -155,10 +144,7 @@ pub const VulkanBackend = struct {
     }
 
     pub fn late_init(self: *Self, texture_image_handle: ResourceHandle) !void {
-        // try self.createTextureImage();
-        // try self.createTextureImageView();
-
-        try self.createTextureSampler();
+        // try self.createTextureSampler();
         try self.createUniformBuffers();
         try self.createDescriptorPool();
         try self.createDescriptorSets(texture_image_handle);
@@ -171,9 +157,6 @@ pub const VulkanBackend = struct {
     }
 
     fn cleanupSwapChain(self: *Self) void {
-        // if (self.depth_image_view != .null_handle) self.vkd.destroyImageView(self.device, self.depth_image_view, null);
-        // if (self.depth_image.img != .null_handle) self.vkd.destroyImage(self.device, self.depth_image.img, null);
-        // if (self.depth_image_memory != .null_handle) self.vkd.freeMemory(self.device, self.depth_image_memory, null);
         self.freeImage(self.depth_image_handle);
 
         if (self.swap_chain_framebuffers != null) {
@@ -222,7 +205,6 @@ pub const VulkanBackend = struct {
         if (self.descriptor_pool != .null_handle) self.vkd.destroyDescriptorPool(self.device, self.descriptor_pool, null);
         if (self.descriptor_sets != null) self.allocator.free(self.descriptor_sets.?);
 
-        if (self.texture_sampler != .null_handle) self.vkd.destroySampler(self.device, self.texture_sampler, null);
         self.images.deinit(self.allocator);
 
         if (self.descriptor_set_layout != .null_handle) self.vkd.destroyDescriptorSetLayout(self.device, self.descriptor_set_layout, null);
@@ -813,13 +795,14 @@ pub const VulkanBackend = struct {
         try self.copyBufferToImage(staging_buffer.buf, texture_image.img, @intCast(u32, tex_width), @intCast(u32, tex_height));
         try self.transitionImageLayout(texture_image.img, .r8g8b8a8_srgb, .transfer_dst_optimal, .shader_read_only_optimal);
 
-        texture_image.view = try self.createImageView(texture_image.img, .r8g8b8a8_srgb, .{ .color_bit = true });
+        texture_image.view    = try self.createImageView(texture_image.img, .r8g8b8a8_srgb, .{ .color_bit = true });
+        texture_image.sampler = try self.createTextureSampler();
         self.setImage(texture_image_handle, texture_image);
 
         return texture_image_handle;
     }
 
-    fn createTextureSampler(self: *Self) !void {
+    fn createTextureSampler(self: *Self) !vk.Sampler {
         const properties = self.vki.getPhysicalDeviceProperties(self.physical_device);
 
         const sampler_info = vk.SamplerCreateInfo{
@@ -841,7 +824,7 @@ pub const VulkanBackend = struct {
             .mipmap_mode = .linear,
         };
 
-        self.texture_sampler = try self.vkd.createSampler(self.device, &sampler_info, null);
+        return try self.vkd.createSampler(self.device, &sampler_info, null);
     }
 
     fn createImageView(self: *Self, image: vk.Image, format: vk.Format, aspect_flags: vk.ImageAspectFlags) !vk.ImageView {
@@ -921,6 +904,9 @@ pub const VulkanBackend = struct {
         self.vkd.destroyImageView(self.device, image.view, null);
         self.vkd.destroyImage    (self.device, image.img,  null);
         self.vkd.freeMemory      (self.device, image.mem,  null);
+        if (image.sampler) |sampler| {
+            self.vkd.destroySampler(self.device, sampler, null);
+        }
     }
 
     fn transitionImageLayout(self: *Self, image: vk.Image, _: vk.Format, old_layout: vk.ImageLayout, new_layout: vk.ImageLayout) !void {
@@ -1083,7 +1069,7 @@ pub const VulkanBackend = struct {
             const image_info = [_]vk.DescriptorImageInfo{.{
                 .image_layout = .shader_read_only_optimal,
                 .image_view = texture_image.view,
-                .sampler = self.texture_sampler,
+                .sampler = texture_image.sampler.?, // TODO (lm): don't unwrap
             }};
 
             const descriptor_writes = [_]vk.WriteDescriptorSet{
