@@ -105,6 +105,17 @@ pub const DeviceDispatch = vk.DeviceWrapper(.{
 
 // ----------------------------------------------
 
+pub const QueueFamilyIndices = struct {
+    graphics_family: ?u32 = null,
+    present_family: ?u32 = null,
+
+    pub fn isComplete(self: *const QueueFamilyIndices) bool {
+        return self.graphics_family != null and self.present_family != null;
+    }
+};
+
+// ----------------------------------------------
+
 pub const Buffer = struct {
     mem: vk.DeviceMemory,
     buf: vk.Buffer,
@@ -122,5 +133,16 @@ pub const Image = struct {
 };
 
 pub const ImageArrayList = std.MultiArrayList(Image);
+
+// ----------------------------------------------
+
+pub const GraphicsPipeline = struct {
+    render_pass: vk.RenderPass = .null_handle,
+    descriptor_set_layout: vk.DescriptorSetLayout = .null_handle,
+    pipeline_layout: vk.PipelineLayout = .null_handle,
+    pipeline: vk.Pipeline = .null_handle,
+};
+
+pub const GraphicsPipelineArrayList = std.ArrayList(GraphicsPipeline);
 
 // ----------------------------------------------

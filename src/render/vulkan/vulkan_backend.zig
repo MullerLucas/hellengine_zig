@@ -23,7 +23,9 @@ const Logger     = vulkan.Logger;
 const Buffer     = vulkan.Buffer;
 const BufferList = vulkan.BufferList;
 const Image      = vulkan.Image;
-const ImageArrayList = vulkan.ImageArrayList;
+const ImageArrayList     = vulkan.ImageArrayList;
+const QueueFamilyIndices = vulkan.QueueFamilyIndices;
+const GraphicsPipeline   = vulkan.GraphicsPipeline;
 
 const c = @cImport({
     @cInclude("stb_image.h");
@@ -37,17 +39,6 @@ const HEIGHT: u32 = 600;
 const MAX_FRAMES_IN_FLIGHT: u32 = 2;
 const validation_layers = [_][*:0]const u8{"VK_LAYER_KHRONOS_validation"};
 const device_extensions = [_][*:0]const u8{vk.extension_info.khr_swapchain.name};
-
-// ----------------------------------------------
-
-const QueueFamilyIndices = struct {
-    graphics_family: ?u32 = null,
-    present_family: ?u32 = null,
-
-    fn isComplete(self: *const QueueFamilyIndices) bool {
-        return self.graphics_family != null and self.present_family != null;
-    }
-};
 
 // ----------------------------------------------
 
@@ -66,7 +57,6 @@ pub const SwapChainSupportDetails = struct {
         if (self.present_modes != null) self.allocator.free(self.present_modes.?);
     }
 };
-
 
 pub const VulkanBackend = struct {
     const Self = @This();
@@ -95,10 +85,10 @@ pub const VulkanBackend = struct {
     swap_chain_image_views: ?[]vk.ImageView = null,
     swap_chain_framebuffers: ?[]vk.Framebuffer = null,
 
-    render_pass: vk.RenderPass = .null_handle,
-    descriptor_set_layout: vk.DescriptorSetLayout = .null_handle,
-    pipeline_layout: vk.PipelineLayout = .null_handle,
-    graphics_pipeline: vk.Pipeline = .null_handle,
+    // render_pass: vk.RenderPass = .null_handle,
+    // descriptor_set_layout: vk.DescriptorSetLayout = .null_handle,
+    // pipeline_layout: vk.PipelineLayout = .null_handle,
+    pipeline_handle: ResourceHandle = ResourceHandle.invalid,
 
     command_pool: vk.CommandPool = .null_handle,
 
@@ -106,6 +96,7 @@ pub const VulkanBackend = struct {
     uniform_buffer_handles: ?[]ResourceHandle = null,
     images: ImageArrayList = ImageArrayList{},
     depth_image_handle: ResourceHandle = ResourceHandle.invalid,
+    pipelines: vulkan.GraphicsPipelineArrayList,
 
     descriptor_pool: vk.DescriptorPool   = .null_handle,
     descriptor_sets: ?[]vk.DescriptorSet = null,
@@ -124,6 +115,7 @@ pub const VulkanBackend = struct {
             .allocator = allocator,
             .start_time = try std.time.Instant.now(),
             .window = window,
+            .pipelines = vulkan.GraphicsPipelineArrayList.init(allocator),
         };
 
         try self.createInstance();
@@ -133,9 +125,11 @@ pub const VulkanBackend = struct {
         try self.createLogicalDevice();
         try self.createSwapChain();
         try self.createImageViews();
-        try self.createRenderPass();
-        try self.createDescriptorSetLayout();
-        try self.createGraphicsPipeline();
+
+        const render_pass           = try self.createRenderPass();
+        const descriptor_set_layout = try self.createDescriptorSetLayout();
+        self.pipeline_handle        = try self.createGraphicsPipeline(render_pass, descriptor_set_layout);
+
         try self.createCommandPool();
         try self.createDepthResources();
         try self.createFramebuffers();
@@ -144,7 +138,6 @@ pub const VulkanBackend = struct {
     }
 
     pub fn late_init(self: *Self, texture_image_handle: ResourceHandle) !void {
-        // try self.createTextureSampler();
         try self.createUniformBuffers();
         try self.createDescriptorPool();
         try self.createDescriptorSets(texture_image_handle);
@@ -191,9 +184,8 @@ pub const VulkanBackend = struct {
 
         self.cleanupSwapChain();
 
-        if (self.graphics_pipeline != .null_handle) self.vkd.destroyPipeline(self.device, self.graphics_pipeline, null);
-        if (self.pipeline_layout != .null_handle) self.vkd.destroyPipelineLayout(self.device, self.pipeline_layout, null);
-        if (self.render_pass != .null_handle) self.vkd.destroyRenderPass(self.device, self.render_pass, null);
+        try self.destroyGraphicsPipeline(self.pipeline_handle);
+        self.pipelines.deinit();
 
         if (self.uniform_buffer_handles != null) {
             for (self.uniform_buffer_handles.?) |uniform_buffer_handle| {
@@ -207,7 +199,7 @@ pub const VulkanBackend = struct {
 
         self.images.deinit(self.allocator);
 
-        if (self.descriptor_set_layout != .null_handle) self.vkd.destroyDescriptorSetLayout(self.device, self.descriptor_set_layout, null);
+        // if (self.descriptor_set_layout != .null_handle) self.vkd.destroyDescriptorSetLayout(self.device, self.descriptor_set_layout, null);
 
         self.buffers.deinit(self.allocator);
 
@@ -460,7 +452,7 @@ pub const VulkanBackend = struct {
         }
     }
 
-    fn createRenderPass(self: *Self) !void {
+    fn createRenderPass(self: *Self) !vk.RenderPass {
         const attachments = [_]vk.AttachmentDescription{
             .{
                 .flags = .{},
@@ -519,7 +511,7 @@ pub const VulkanBackend = struct {
             .dependency_flags = .{},
         }};
 
-        self.render_pass = try self.vkd.createRenderPass(self.device, &.{
+        return try self.vkd.createRenderPass(self.device, &.{
             .flags = .{},
             .attachment_count = attachments.len,
             .p_attachments = &attachments,
@@ -530,7 +522,7 @@ pub const VulkanBackend = struct {
         }, null);
     }
 
-    fn createDescriptorSetLayout(self: *Self) !void {
+    fn createDescriptorSetLayout(self: *Self) !vk.DescriptorSetLayout {
         const bindings = [_]vk.DescriptorSetLayoutBinding{
             .{
                 .binding = 0,
@@ -554,10 +546,10 @@ pub const VulkanBackend = struct {
             .p_bindings = &bindings,
         };
 
-        self.descriptor_set_layout = try self.vkd.createDescriptorSetLayout(self.device, &layout_info, null);
+        return try self.vkd.createDescriptorSetLayout(self.device, &layout_info, null);
     }
 
-    fn createGraphicsPipeline(self: *Self) !void {
+    pub fn createGraphicsPipeline(self: *Self, render_pass: vk.RenderPass, descriptor_set_layout: vk.DescriptorSetLayout) !ResourceHandle {
         const vert_shader_module: vk.ShaderModule = try self.createShaderModule(&resources.vert_27);
         defer self.vkd.destroyShaderModule(self.device, vert_shader_module, null);
         const frag_shader_module: vk.ShaderModule = try self.createShaderModule(&resources.frag_27);
@@ -669,10 +661,10 @@ pub const VulkanBackend = struct {
             .p_dynamic_states = &dynamic_states,
         };
 
-        self.pipeline_layout = try self.vkd.createPipelineLayout(self.device, &.{
+        const pipeline_layout = try self.vkd.createPipelineLayout(self.device, &.{
             .flags = .{},
             .set_layout_count = 1,
-            .p_set_layouts = @ptrCast([*]const vk.DescriptorSetLayout, &self.descriptor_set_layout),
+            .p_set_layouts = @ptrCast([*]const vk.DescriptorSetLayout, &descriptor_set_layout),
             .push_constant_range_count = 0,
             .p_push_constant_ranges = undefined,
         }, null);
@@ -690,21 +682,43 @@ pub const VulkanBackend = struct {
             .p_depth_stencil_state = &depth_stencil,
             .p_color_blend_state = &color_blending,
             .p_dynamic_state = &dynamic_state,
-            .layout = self.pipeline_layout,
-            .render_pass = self.render_pass,
+            .layout = pipeline_layout,
+            .render_pass = render_pass,
             .subpass = 0,
             .base_pipeline_handle = .null_handle,
             .base_pipeline_index = -1,
         }};
 
+        var pipeline: vk.Pipeline = undefined;
         _ = try self.vkd.createGraphicsPipelines(
             self.device,
             .null_handle,
             pipeline_info.len,
             &pipeline_info,
             null,
-            @ptrCast([*]vk.Pipeline, &self.graphics_pipeline),
+            @ptrCast([*]vk.Pipeline, &pipeline),
         );
+
+        try self.pipelines.append(GraphicsPipeline {
+            .render_pass = render_pass,
+            .descriptor_set_layout = descriptor_set_layout,
+            .pipeline = pipeline,
+            .pipeline_layout = pipeline_layout,
+        });
+
+        return ResourceHandle { .value = self.pipelines.items.len - 1 };
+    }
+
+    pub fn destroyGraphicsPipeline(self: *Self, pipeline_handle: ResourceHandle) !void {
+        var pipeline = self.pipelines.items[pipeline_handle.value];
+        self.vkd.destroyPipeline(self.device, pipeline.pipeline, null);
+        self.vkd.destroyPipelineLayout(self.device, pipeline.pipeline_layout, null);
+        self.vkd.destroyRenderPass(self.device, pipeline.render_pass, null);
+        self.vkd.destroyDescriptorSetLayout(self.device, pipeline.descriptor_set_layout, null);
+    }
+
+    pub fn getGraphicsPipeline(self: *Self, handle: ResourceHandle) GraphicsPipeline {
+        return self.pipelines.items[handle.value];
     }
 
     fn createFramebuffers(self: *Self) !void {
@@ -714,9 +728,10 @@ pub const VulkanBackend = struct {
             const depth_image = self.getImage(self.depth_image_handle);
             const attachments = [_]vk.ImageView{ self.swap_chain_image_views.?[i], depth_image.view };
 
+            const pipeline = self.getGraphicsPipeline(self.pipeline_handle);
             framebuffer.* = try self.vkd.createFramebuffer(self.device, &.{
                 .flags = .{},
-                .render_pass = self.render_pass,
+                .render_pass = pipeline.render_pass,
                 .attachment_count = attachments.len,
                 .p_attachments = &attachments,
                 .width = self.swap_chain_extent.width,
@@ -1047,7 +1062,8 @@ pub const VulkanBackend = struct {
     }
 
     fn createDescriptorSets(self: *Self, texture_image_handle: ResourceHandle) !void {
-        const layouts = [_]vk.DescriptorSetLayout{ self.descriptor_set_layout, self.descriptor_set_layout };
+        const pipeline = self.getGraphicsPipeline(self.pipeline_handle);
+        const layouts = [_]vk.DescriptorSetLayout{ pipeline.descriptor_set_layout, pipeline.descriptor_set_layout };
         const alloc_info = vk.DescriptorSetAllocateInfo{
             .descriptor_pool = self.descriptor_pool,
             .descriptor_set_count = MAX_FRAMES_IN_FLIGHT,
@@ -1222,8 +1238,9 @@ pub const VulkanBackend = struct {
             .{ .depth_stencil = .{ .depth = 1.0, .stencil = 0 } },
         };
 
+        const pipeline = self.getGraphicsPipeline(self.pipeline_handle);
         const render_pass_info = vk.RenderPassBeginInfo{
-            .render_pass = self.render_pass,
+            .render_pass = pipeline.render_pass,
             .framebuffer = self.swap_chain_framebuffers.?[image_index],
             .render_area = vk.Rect2D{
                 .offset = .{ .x = 0, .y = 0 },
@@ -1235,7 +1252,7 @@ pub const VulkanBackend = struct {
 
         self.vkd.cmdBeginRenderPass(command_buffer, &render_pass_info, .@"inline");
         {
-            self.vkd.cmdBindPipeline(command_buffer, .graphics, self.graphics_pipeline);
+            self.vkd.cmdBindPipeline(command_buffer, .graphics, pipeline.pipeline);
 
             const viewports = [_]vk.Viewport{.{
                 .x = 0,
@@ -1261,7 +1278,7 @@ pub const VulkanBackend = struct {
 
                 self.vkd.cmdBindVertexBuffers(command_buffer, 0, 1, &vertex_buffers, &offsets);
                 self.vkd.cmdBindIndexBuffer(command_buffer, index_buffer, 0, vk.IndexType.uint16);
-                self.vkd.cmdBindDescriptorSets(command_buffer, .graphics, self.pipeline_layout, 0, 1, @ptrCast([*]const vk.DescriptorSet, &self.descriptor_sets.?[self.current_frame]), 0, undefined);
+                self.vkd.cmdBindDescriptorSets(command_buffer, .graphics, pipeline.pipeline_layout, 0, 1, @ptrCast([*]const vk.DescriptorSet, &self.descriptor_sets.?[self.current_frame]), 0, undefined);
 
                 self.vkd.cmdDrawIndexed(command_buffer, index_count, 1, 0, 0, 0);
             }
