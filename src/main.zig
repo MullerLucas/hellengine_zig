@@ -1,6 +1,8 @@
 const std = @import("std");
 
 
+const config = @import("config.zig");
+
 const core   = @import("./core/core.zig");
 const Logger = core.log.scoped(.app);
 
@@ -14,12 +16,6 @@ const TestScene = app.TestScene;
 
 // ----------------------------------------------
 
-const APP_NAME    = "hell-app";
-const WIDTH:  u32 = 800;
-const HEIGHT: u32 = 600;
-
-// ----------------------------------------------
-
 pub fn main() !void {
     Logger.info("starting appliation\n", .{});
 
@@ -30,7 +26,7 @@ pub fn main() !void {
     }
     const allocator = gpa.allocator();
 
-    var window = try GlfwWindow.init(WIDTH, HEIGHT, APP_NAME);
+    var window = try GlfwWindow.init(config.WIDTH, config.HEIGHT, config.APP_NAME);
     defer window.deinit();
 
     var renderer = Renderer.init(allocator, &window) catch |err| {

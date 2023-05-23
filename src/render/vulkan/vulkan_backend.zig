@@ -33,9 +33,6 @@ const c = @cImport({
 
 // ----------------------------------------------
 
-const APP_NAME    = "hell-app";
-const WIDTH:  u32 = 800;
-const HEIGHT: u32 = 600;
 const MAX_FRAMES_IN_FLIGHT: u32 = 2;
 const validation_layers = [_][*:0]const u8{"VK_LAYER_KHRONOS_validation"};
 const device_extensions = [_][*:0]const u8{vk.extension_info.khr_swapchain.name};
@@ -550,6 +547,8 @@ pub const VulkanBackend = struct {
     }
 
     pub fn createGraphicsPipeline(self: *Self, render_pass: vk.RenderPass, descriptor_set_layout: vk.DescriptorSetLayout) !ResourceHandle {
+        Logger.debug("create graphics-pipeline '{}'\n", .{ self.pipelines.items.len });
+
         const vert_shader_module: vk.ShaderModule = try self.createShaderModule(&resources.vert_27);
         defer self.vkd.destroyShaderModule(self.device, vert_shader_module, null);
         const frag_shader_module: vk.ShaderModule = try self.createShaderModule(&resources.frag_27);
@@ -709,8 +708,10 @@ pub const VulkanBackend = struct {
         return ResourceHandle { .value = self.pipelines.items.len - 1 };
     }
 
-    pub fn destroyGraphicsPipeline(self: *Self, pipeline_handle: ResourceHandle) !void {
-        var pipeline = self.pipelines.items[pipeline_handle.value];
+    pub fn destroyGraphicsPipeline(self: *Self, handle: ResourceHandle) !void {
+        Logger.debug("destroy graphics-pipeline '{}'\n", .{ handle.value });
+
+        var pipeline = self.pipelines.items[handle.value];
         self.vkd.destroyPipeline(self.device, pipeline.pipeline, null);
         self.vkd.destroyPipelineLayout(self.device, pipeline.pipeline_layout, null);
         self.vkd.destroyRenderPass(self.device, pipeline.render_pass, null);
