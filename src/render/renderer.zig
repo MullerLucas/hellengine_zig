@@ -34,12 +34,12 @@ pub const Renderer = struct {
         self.backend.deinit();
     }
 
-    pub fn drawFrame(self: *Renderer, render_data: *const RenderData) !void {
-        try self.backend.drawFrame(render_data);
+    pub fn draw_frame(self: *Renderer, render_data: *const RenderData) !void {
+        try self.backend.draw_frame(render_data);
     }
 
-    pub fn deviceWaitIdle(self: *Renderer) !void {
-        try self.backend.waitDeviceIdle();
+    pub fn device_wait_idle(self: *Renderer) !void {
+        try self.backend.wait_device_idle();
     }
 };
 

@@ -21,7 +21,7 @@ pub const Vertex = struct {
     color:     [3]f32 = .{ 0, 0, 0 },
     tex_coord: [2]f32 = .{ 0, 0 },
 
-    pub fn getBindingDescription() vk.VertexInputBindingDescription {
+    pub fn get_binding_description() vk.VertexInputBindingDescription {
         return vk.VertexInputBindingDescription{
             .binding = 0,
             .stride = @sizeOf(Vertex),
@@ -29,7 +29,7 @@ pub const Vertex = struct {
         };
     }
 
-    pub fn getAttributeDescriptions() [3]vk.VertexInputAttributeDescription {
+    pub fn get_attribute_descriptions() [3]vk.VertexInputAttributeDescription {
         return [_]vk.VertexInputAttributeDescription{
             .{
                 .binding = 0,
@@ -72,14 +72,14 @@ pub const RenderData = struct {
     len: usize = 0,
     meshes: [DATA_LIMIT]*Mesh = undefined,
 
-    pub fn addMesh(self: *RenderData, mesh: *Mesh) void {
+    pub fn add_mesh(self: *RenderData, mesh: *Mesh) void {
         assert(self.len < RenderData.DATA_LIMIT);
 
         self.meshes[self.len] = mesh;
         self.len += 1;
     }
 
-    pub fn meshSlice(self: *const RenderData) []const *const Mesh {
+    pub fn mesh_slice(self: *const RenderData) []const *const Mesh {
         return self.meshes[0..self.len];
     }
 };

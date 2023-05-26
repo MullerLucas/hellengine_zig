@@ -12,11 +12,11 @@ pub const AnsiColor8 = enum(u8) {
     white = 7,
     default = 9,
 
-    fn asFgStr(comptime self: AnsiColor8) []const u8 {
+    fn as_fg_str(comptime self: AnsiColor8) []const u8 {
         return std.fmt.comptimePrint("\x1b[3{}m", .{ @enumToInt(self) });
     }
 
-    fn asBgStr(comptime self: AnsiColor8) []const u8 {
+    fn as_bg_str(comptime self: AnsiColor8) []const u8 {
         return std.fmt.comptimePrint("\x1b[4{}m", .{ @enumToInt(self) });
     }
 };
@@ -32,7 +32,7 @@ pub const LogLevel = enum {
     warn,
     err,
 
-    pub fn asText(comptime self: LogLevel) []const u8 {
+    pub fn as_text(comptime self: LogLevel) []const u8 {
         return switch (self) {
             .debug => "DEBUG",
             .info  => "INFO ",
@@ -41,7 +41,7 @@ pub const LogLevel = enum {
         };
     }
 
-    pub fn asColor(comptime self: LogLevel) AnsiColor8 {
+    pub fn as_color(comptime self: LogLevel) AnsiColor8 {
         return switch (self) {
             .debug => AnsiColor8.blue,
             .info  => AnsiColor8.green,
@@ -62,19 +62,19 @@ pub fn scoped(comptime scope: @TypeOf(.EnumLiteral)) type {
             args: anytype
         ) void {
             const scope_txt = "(" ++ @tagName(scope) ++ ")";
-            const level_txt = "[" ++ comptime level.asText() ++ "]";
+            const level_txt = "[" ++ comptime level.as_text() ++ "]";
 
             std.debug.getStderrMutex().lock();
             defer std.debug.getStderrMutex().unlock();
             const stderr = std.io.getStdErr().writer();
 
             nosuspend stderr.print(
-                comptime level.asColor().asFgStr() ++
+                comptime level.as_color().as_fg_str() ++
                 level_txt ++
                 scope_txt ++
                 ": " ++
                 format ++
-                AnsiColor8.default.asFgStr(),
+                AnsiColor8.default.as_fg_str(),
                 args
             ) catch return;
         }

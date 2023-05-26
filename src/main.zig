@@ -50,12 +50,12 @@ pub fn main() !void {
     //     return;
     // };
 
-    while (!window.shouldClose()) {
-        GlfwWindow.pollEvents();
-        try renderer.drawFrame(&scene.render_data);
+    while (!window.should_close()) {
+        GlfwWindow.poll_events();
+        try renderer.draw_frame(&scene.render_data);
     }
 
-    try renderer.deviceWaitIdle();
+    try renderer.device_wait_idle();
 
     Logger.info("exiting appliation\n", .{});
 }
