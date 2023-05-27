@@ -1,12 +1,12 @@
 const assert = @import("std").debug.assert;
 
-pub fn SlotArray(comptime T: type, comptime array_size: usize) type {
+pub fn SlotArray(comptime T: type, comptime array_capacity: usize) type {
     return struct {
         const Self = @This();
-        const size = array_size;
+        const capacity = array_capacity;
 
-        data:    [size]T    = undefined,
-        is_free: [size]bool = [_]bool { true } ** size,
+        data:    [capacity]T    = undefined,
+        is_free: [capacity]bool = [_]bool { true } ** capacity,
 
         fn find_first_free_slot(self: *const Self) usize {
             var idx: usize = 0;
@@ -21,7 +21,7 @@ pub fn SlotArray(comptime T: type, comptime array_size: usize) type {
 
         pub fn add(self: *Self, value: T) usize {
             const free_slot = self.find_first_free_slot();
-            assert(free_slot < size);
+            assert(free_slot < capacity);
 
             self.is_free[free_slot] = false;
             self.data[free_slot] = value;
@@ -49,9 +49,9 @@ pub fn SlotArray(comptime T: type, comptime array_size: usize) type {
             return &self.data[idx];
         }
 
-        pub fn to_string(self: *const Self) [size*2]u8 {
-            var result: [size*2]u8 = undefined;
-            for (0..(size / 2)) |idx| {
+        pub fn to_string(self: *const Self) [capacity*2]u8 {
+            var result: [capacity*2]u8 = undefined;
+            for (0..(capacity / 2)) |idx| {
                 result[idx * 2 + 0] = if (self.is_free[idx]) 'F' else 'o';
                 result[idx * 2 + 1] = ';';
             }

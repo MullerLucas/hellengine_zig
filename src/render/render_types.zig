@@ -6,6 +6,7 @@ const ResourceHandle = core_types.ResourceHandle;
 
 const core = @import("../core/core.zig");
 const config = @import("../config.zig");
+const Logger = core.log.scoped(.render);
 
 const assert = std.debug.assert;
 
@@ -70,12 +71,39 @@ pub const MeshList = std.ArrayList(Mesh);
 
 // ----------------------------------------------
 
+pub const ShaderAttribute = struct {
+    format: NumberFormat,
+    binding: usize,
+    layout: usize,
+};
+
+pub const ShaderAttributeArray = core.StackArray(vk.VertexInputAttributeDescription, config.shader_attribute_limit);
+// pub const ShaderAttributeArray = core.StackArray(ShaderAttribute, config.shader_attribute_limit);
+
+// ----------------------------------------------
+
 pub const ShaderProgram = struct {
-    descriptor_set_layout: vk.DescriptorSetLayout,
-    pipeline: ResourceHandle,
+    descriptor_set_layout: vk.DescriptorSetLayout = .null_handle,
+    pipeline: ResourceHandle = ResourceHandle.invalid,
     uniform_buffers: ?[]ResourceHandle = null,
     descriptor_pool: vk.DescriptorPool   = .null_handle,
     descriptor_sets: ?[]vk.DescriptorSet = null,
+
+    attributes: ShaderAttributeArray = .{},
+    attribute_stride: usize = 0,
+
+    pub fn add_attribute(self: *ShaderProgram, format: NumberFormat, binding: usize, location: usize) void {
+        Logger.info("add attribute with format '{}', binding '{}' and location '{}'\n", .{format, binding, location});
+
+        self.attributes.push(.{
+            .binding  = @intCast(u32, binding),
+            .location = @intCast(u32, location),
+            .format   = format.to_vk_format(),
+            .offset   = @intCast(u32, self.attribute_stride),
+        });
+
+        self.attribute_stride += format.size();
+    }
 };
 
 // ----------------------------------------------
@@ -94,6 +122,34 @@ pub const RenderData = struct {
 
     pub fn mesh_slice(self: *const RenderData) []const *const Mesh {
         return self.meshes[0..self.len];
+    }
+};
+
+// ----------------------------------------------
+
+pub const NumberFormat = enum {
+    undefined,
+    r32g32_sfloat,
+    r32g32b32_sfloat,
+    r32g32b32a32_sfloat,
+
+
+    pub fn to_vk_format(self: NumberFormat) vk.Format {
+        return switch (self) {
+            .r32g32_sfloat       => .r32g32_sfloat,
+            .r32g32b32_sfloat    => .r32g32b32_sfloat,
+            .r32g32b32a32_sfloat => .r32g32b32a32_sfloat,
+            else => .undefined,
+        };
+    }
+
+    pub fn size(self: NumberFormat) usize {
+        return switch (self){
+            .r32g32_sfloat       => @sizeOf(f32) * 2,
+            .r32g32b32_sfloat    => @sizeOf(f32) * 3,
+            .r32g32b32a32_sfloat => @sizeOf(f32) * 4,
+            else => 0,
+        };
     }
 };
 

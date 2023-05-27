@@ -133,17 +133,11 @@ pub const VulkanBackend = struct {
         try self.create_image_views();
 
         self.render_pass = try self.create_render_pass();
-        // const render_pass           = try self.create_render_pass();
-        // const descriptor_set_layout = try self.create_descriptor_set_layout();
-        // self.pipeline_handle        = try self.create_graphics_pipeline(render_pass, descriptor_set_layout);
 
         try self.createCommandPool();
         try self.create_depth_resources();
         try self.create_framebuffers();
 
-        // try self.create_uniform_buffers();
-        // try self.create_descriptor_pool();
-        // try self.create_descriptor_sets(texture_image_handle);
         try self.create_command_buffers();
         try self.create_sync_objects();
 
@@ -1417,7 +1411,7 @@ pub const VulkanBackend = struct {
 
     // ------------------------------------------
 
-    fn create_graphics_pipeline(self: *Self, render_pass: vk.RenderPass, descriptor_set_layout: vk.DescriptorSetLayout) !ResourceHandle {
+    fn create_graphics_pipeline(self: *Self, render_pass: vk.RenderPass, descriptor_set_layout: vk.DescriptorSetLayout, attribute_descriptions: []const vk.VertexInputAttributeDescription) !ResourceHandle {
         Logger.debug("create graphics-pipeline '{}'\n", .{ self.pipelines.items.len });
 
         const vert_shader_module: vk.ShaderModule = try self.create_shader_module(&resources.vert_27);
@@ -1443,14 +1437,14 @@ pub const VulkanBackend = struct {
         };
 
         const binding_description    = Vertex.get_binding_description();
-        const attribute_descriptions = Vertex.get_attribute_descriptions();
+        // const attribute_descriptions = Vertex.get_attribute_descriptions();
 
-        const vertex_input_info = vk.PipelineVertexInputStateCreateInfo{
+        const vertex_input_info = vk.PipelineVertexInputStateCreateInfo {
             .flags = .{},
-            .vertex_binding_description_count = 1,
-            .p_vertex_binding_descriptions = @ptrCast([*]const vk.VertexInputBindingDescription, &binding_description),
-            .vertex_attribute_description_count = attribute_descriptions.len,
-            .p_vertex_attribute_descriptions = &attribute_descriptions,
+            .vertex_binding_description_count   = 1,
+            .p_vertex_binding_descriptions      = @ptrCast([*]const vk.VertexInputBindingDescription, &binding_description),
+            .vertex_attribute_description_count = @intCast(u32, attribute_descriptions.len),
+            .p_vertex_attribute_descriptions    = @ptrCast([*]const vk.VertexInputAttributeDescription ,attribute_descriptions),
         };
 
         const input_assembly = vk.PipelineInputAssemblyStateCreateInfo{
@@ -1598,20 +1592,26 @@ pub const VulkanBackend = struct {
     pub fn create_shader_program(self: *Self, texture_image: ResourceHandle) !ResourceHandle {
         Logger.info("creating shader-program\n", .{});
 
+        var program = ShaderProgram{};
+
+        program.add_attribute(.r32g32b32_sfloat, 0, 0);
+        program.add_attribute(.r32g32b32_sfloat, 0, 1);
+        program.add_attribute(.r32g32_sfloat,    0, 2);
+
         const descriptor_set_layout = try self.create_descriptor_set_layout();
-        const pipeline = try self.create_graphics_pipeline(self.render_pass, descriptor_set_layout);
+        const pipeline = try self.create_graphics_pipeline(self.render_pass, descriptor_set_layout, program.attributes.as_slice());
 
         const uniform_buffers = try self.create_uniform_buffers();
         const descriptor_pool = try self.create_descriptor_pool();
         const descriptor_sets = try self.create_descriptor_sets(texture_image, pipeline, descriptor_pool, uniform_buffers);
 
-        const slot = self.programs.add(.{
-            .descriptor_set_layout = descriptor_set_layout,
-            .pipeline = pipeline,
-            .uniform_buffers = uniform_buffers,
-            .descriptor_pool = descriptor_pool,
-            .descriptor_sets = descriptor_sets,
-        });
+        program.descriptor_set_layout = descriptor_set_layout;
+        program.pipeline = pipeline;
+        program.uniform_buffers = uniform_buffers;
+        program.descriptor_pool = descriptor_pool;
+        program.descriptor_sets = descriptor_sets;
+
+        const slot = self.programs.add(program);
 
         return ResourceHandle { .value = slot };
     }
