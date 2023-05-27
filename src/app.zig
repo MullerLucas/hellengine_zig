@@ -9,6 +9,7 @@ const Vertex     = render.Vertex;
 
 const core   = @import("./core/core.zig");
 const Logger = core.log.scoped(.app);
+const ResourceHandle = core.ResourceHandle;
 
 // ----------------------------------------------g
 
@@ -16,6 +17,7 @@ pub const TestScene = struct {
     renderer: *Renderer,
     meshes: MeshList,
     render_data: RenderData,
+    program: ResourceHandle = ResourceHandle.invalid,
 
     pub fn init(allocator: std.mem.Allocator, renderer: *Renderer) !TestScene {
         Logger.info("initializing test-scene\n", .{});
@@ -35,6 +37,9 @@ pub const TestScene = struct {
         self.render_data.add_mesh(&self.meshes.items[1]);
         self.render_data.add_mesh(&self.meshes.items[2]);
 
+
+        self.program = try self.renderer.backend.create_shader_program(self.meshes.items[0].texture);
+
         return self;
     }
 
@@ -48,6 +53,8 @@ pub const TestScene = struct {
         }
 
         self.meshes.deinit();
+
+        self.renderer.backend.destroy_shader_program(self.program);
     }
 
     pub fn createQuadMesh1(self: *TestScene) !Mesh {

@@ -25,17 +25,13 @@ pub const Renderer = struct {
         };
     }
 
-    pub fn late_init(self: *Renderer, texture_image_handle: ResourceHandle) !void {
-        try self.backend.late_init(texture_image_handle);
-    }
-
     pub fn deinit(self: *Renderer) void {
         Logger.info("deinitializing renderer-frontend\n", .{});
         self.backend.deinit();
     }
 
-    pub fn draw_frame(self: *Renderer, render_data: *const RenderData) !void {
-        try self.backend.draw_frame(render_data);
+    pub fn draw_frame(self: *Renderer, render_data: *const RenderData, program: ResourceHandle) !void {
+        try self.backend.draw_frame(render_data, program);
     }
 
     pub fn device_wait_idle(self: *Renderer) !void {

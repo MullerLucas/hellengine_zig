@@ -11,12 +11,14 @@ const config    = @import("../../config.zig");
 const resources = @import("resources");
 
 const core           = @import("../../core/core.zig");
+const SlotArray      = core.SlotArray;
 const ResourceHandle = core.ResourceHandle;
 
 const render              = @import("../render.zig");
 const Vertex              = render.Vertex;
 const RenderData          = render.RenderData;
 const UniformBufferObject = render.UniformBufferObject;
+const ShaderProgram       = render.ShaderProgram;
 
 const vulkan     = @import("./vulkan.zig");
 const Logger     = vulkan.Logger;
@@ -27,13 +29,13 @@ const ImageArrayList     = vulkan.ImageArrayList;
 const QueueFamilyIndices = vulkan.QueueFamilyIndices;
 const GraphicsPipeline   = vulkan.GraphicsPipeline;
 
+
 const c = @cImport({
     @cInclude("stb_image.h");
 });
 
 // ----------------------------------------------
 
-const MAX_FRAMES_IN_FLIGHT: u32 = 2;
 const validation_layers = [_][*:0]const u8{"VK_LAYER_KHRONOS_validation"};
 const device_extensions = [_][*:0]const u8{vk.extension_info.khr_swapchain.name};
 
@@ -54,6 +56,12 @@ pub const SwapChainSupportDetails = struct {
         if (self.present_modes != null) self.allocator.free(self.present_modes.?);
     }
 };
+
+// ----------------------------------------------
+
+const ShaderProgramArray = SlotArray(ShaderProgram, 64);
+
+// ----------------------------------------------
 
 pub const VulkanBackend = struct {
     const Self = @This();
@@ -82,21 +90,19 @@ pub const VulkanBackend = struct {
     swap_chain_image_views: ?[]vk.ImageView = null,
     swap_chain_framebuffers: ?[]vk.Framebuffer = null,
 
-    // render_pass: vk.RenderPass = .null_handle,
-    // descriptor_set_layout: vk.DescriptorSetLayout = .null_handle,
-    // pipeline_layout: vk.PipelineLayout = .null_handle,
-    pipeline_handle: ResourceHandle = ResourceHandle.invalid,
 
     command_pool: vk.CommandPool = .null_handle,
 
     buffers: BufferList = BufferList{},
-    uniform_buffer_handles: ?[]ResourceHandle = null,
+    // uniform_buffer_handles: ?[]ResourceHandle = null,
     images: ImageArrayList = ImageArrayList{},
     depth_image_handle: ResourceHandle = ResourceHandle.invalid,
     pipelines: vulkan.GraphicsPipelineArrayList,
+    // pipeline_handle: ResourceHandle = ResourceHandle.invalid,
 
-    descriptor_pool: vk.DescriptorPool   = .null_handle,
-    descriptor_sets: ?[]vk.DescriptorSet = null,
+    // descriptor_pool: vk.DescriptorPool   = .null_handle,
+    // descriptor_sets: ?[]vk.DescriptorSet = null,
+    programs: ShaderProgramArray = .{},
 
     command_buffers: ?[]vk.CommandBuffer = null,
 
@@ -106,6 +112,9 @@ pub const VulkanBackend = struct {
     current_frame: u32 = 0,
 
     start_time: std.time.Instant,
+
+    render_pass: vk.RenderPass = .null_handle,
+
 
     pub fn init(allocator: Allocator, window: *GlfwWindow) !Self {
         var self = Self{
@@ -123,23 +132,22 @@ pub const VulkanBackend = struct {
         try self.create_swap_chain();
         try self.create_image_views();
 
-        const render_pass           = try self.create_render_pass();
-        const descriptor_set_layout = try self.create_descriptor_set_layout();
-        self.pipeline_handle        = try self.create_graphics_pipeline(render_pass, descriptor_set_layout);
+        self.render_pass = try self.create_render_pass();
+        // const render_pass           = try self.create_render_pass();
+        // const descriptor_set_layout = try self.create_descriptor_set_layout();
+        // self.pipeline_handle        = try self.create_graphics_pipeline(render_pass, descriptor_set_layout);
 
         try self.createCommandPool();
         try self.create_depth_resources();
         try self.create_framebuffers();
 
-        return self;
-    }
-
-    pub fn late_init(self: *Self, texture_image_handle: ResourceHandle) !void {
-        try self.create_uniform_buffers();
-        try self.create_descriptor_pool();
-        try self.create_descriptor_sets(texture_image_handle);
+        // try self.create_uniform_buffers();
+        // try self.create_descriptor_pool();
+        // try self.create_descriptor_sets(texture_image_handle);
         try self.create_command_buffers();
         try self.create_sync_objects();
+
+        return self;
     }
 
     pub fn wait_device_idle(self: *VulkanBackend) !void {
@@ -181,18 +189,18 @@ pub const VulkanBackend = struct {
 
         self.cleanup_swap_chain();
 
-        try self.destroy_graphics_pipeline(self.pipeline_handle);
+        // try self.destroy_graphics_pipeline(self.pipeline_handle);
         self.pipelines.deinit();
 
-        if (self.uniform_buffer_handles != null) {
-            for (self.uniform_buffer_handles.?) |uniform_buffer_handle| {
-                self.free_buffer(uniform_buffer_handle);
-            }
-            self.allocator.free(self.uniform_buffer_handles.?);
-        }
+        // if (self.uniform_buffer_handles != null) {
+        //     for (self.uniform_buffer_handles.?) |uniform_buffer_handle| {
+        //         self.free_buffer(uniform_buffer_handle);
+        //     }
+        //     self.allocator.free(self.uniform_buffer_handles.?);
+        // }
 
-        if (self.descriptor_pool != .null_handle) self.vkd.destroyDescriptorPool(self.device, self.descriptor_pool, null);
-        if (self.descriptor_sets != null) self.allocator.free(self.descriptor_sets.?);
+        // if (self.descriptor_pool != .null_handle) self.vkd.destroyDescriptorPool(self.device, self.descriptor_pool, null);
+        // if (self.descriptor_sets != null) self.allocator.free(self.descriptor_sets.?);
 
         self.images.deinit(self.allocator);
 
@@ -546,182 +554,6 @@ pub const VulkanBackend = struct {
         return try self.vkd.createDescriptorSetLayout(self.device, &layout_info, null);
     }
 
-    pub fn create_graphics_pipeline(self: *Self, render_pass: vk.RenderPass, descriptor_set_layout: vk.DescriptorSetLayout) !ResourceHandle {
-        Logger.debug("create graphics-pipeline '{}'\n", .{ self.pipelines.items.len });
-
-        const vert_shader_module: vk.ShaderModule = try self.create_shader_module(&resources.vert_27);
-        defer self.vkd.destroyShaderModule(self.device, vert_shader_module, null);
-        const frag_shader_module: vk.ShaderModule = try self.create_shader_module(&resources.frag_27);
-        defer self.vkd.destroyShaderModule(self.device, frag_shader_module, null);
-
-        const shader_stages = [_]vk.PipelineShaderStageCreateInfo{
-            .{
-                .flags = .{},
-                .stage = .{ .vertex_bit = true },
-                .module = vert_shader_module,
-                .p_name = "main",
-                .p_specialization_info = null,
-            },
-            .{
-                .flags = .{},
-                .stage = .{ .fragment_bit = true },
-                .module = frag_shader_module,
-                .p_name = "main",
-                .p_specialization_info = null,
-            },
-        };
-
-        const binding_description    = Vertex.get_binding_description();
-        const attribute_descriptions = Vertex.get_attribute_descriptions();
-
-        const vertex_input_info = vk.PipelineVertexInputStateCreateInfo{
-            .flags = .{},
-            .vertex_binding_description_count = 1,
-            .p_vertex_binding_descriptions = @ptrCast([*]const vk.VertexInputBindingDescription, &binding_description),
-            .vertex_attribute_description_count = attribute_descriptions.len,
-            .p_vertex_attribute_descriptions = &attribute_descriptions,
-        };
-
-        const input_assembly = vk.PipelineInputAssemblyStateCreateInfo{
-            .flags = .{},
-            .topology = .triangle_list,
-            .primitive_restart_enable = vk.FALSE,
-        };
-
-        const viewport_state = vk.PipelineViewportStateCreateInfo{
-            .flags = .{},
-            .viewport_count = 1,
-            .p_viewports = undefined,
-            .scissor_count = 1,
-            .p_scissors = undefined,
-        };
-
-        const rasterizer = vk.PipelineRasterizationStateCreateInfo{
-            .flags = .{},
-            .depth_clamp_enable = vk.FALSE,
-            .rasterizer_discard_enable = vk.FALSE,
-            .polygon_mode = .fill,
-            .cull_mode = .{ .back_bit = true },
-            .front_face = .counter_clockwise,
-            .depth_bias_enable = vk.FALSE,
-            .depth_bias_constant_factor = 0,
-            .depth_bias_clamp = 0,
-            .depth_bias_slope_factor = 0,
-            .line_width = 1,
-        };
-
-        const multisampling = vk.PipelineMultisampleStateCreateInfo{
-            .flags = .{},
-            .rasterization_samples = .{ .@"1_bit" = true },
-            .sample_shading_enable = vk.FALSE,
-            .min_sample_shading = 1,
-            .p_sample_mask = null,
-            .alpha_to_coverage_enable = vk.FALSE,
-            .alpha_to_one_enable = vk.FALSE,
-        };
-
-        const depth_stencil = vk.PipelineDepthStencilStateCreateInfo{
-            .flags = .{},
-            .depth_test_enable = vk.TRUE,
-            .depth_write_enable = vk.TRUE,
-            .depth_compare_op = vk.CompareOp.less,
-            .depth_bounds_test_enable = vk.FALSE,
-            .stencil_test_enable = vk.FALSE,
-            .front = undefined,
-            .back = undefined,
-            .min_depth_bounds = 0,
-            .max_depth_bounds = 1,
-        };
-
-        const color_blend_attachment = [_]vk.PipelineColorBlendAttachmentState{.{
-            .blend_enable = vk.FALSE,
-            .src_color_blend_factor = .one,
-            .dst_color_blend_factor = .zero,
-            .color_blend_op = .add,
-            .src_alpha_blend_factor = .one,
-            .dst_alpha_blend_factor = .zero,
-            .alpha_blend_op = .add,
-            .color_write_mask = .{ .r_bit = true, .g_bit = true, .b_bit = true, .a_bit = true },
-        }};
-
-        const color_blending = vk.PipelineColorBlendStateCreateInfo{
-            .flags = .{},
-            .logic_op_enable = vk.FALSE,
-            .logic_op = .copy,
-            .attachment_count = color_blend_attachment.len,
-            .p_attachments = &color_blend_attachment,
-            .blend_constants = [_]f32{ 0, 0, 0, 0 },
-        };
-        const dynamic_states = [_]vk.DynamicState{ .viewport, .scissor };
-
-        const dynamic_state = vk.PipelineDynamicStateCreateInfo{
-            .flags = .{},
-            .dynamic_state_count = dynamic_states.len,
-            .p_dynamic_states = &dynamic_states,
-        };
-
-        const pipeline_layout = try self.vkd.createPipelineLayout(self.device, &.{
-            .flags = .{},
-            .set_layout_count = 1,
-            .p_set_layouts = @ptrCast([*]const vk.DescriptorSetLayout, &descriptor_set_layout),
-            .push_constant_range_count = 0,
-            .p_push_constant_ranges = undefined,
-        }, null);
-
-        const pipeline_info = [_]vk.GraphicsPipelineCreateInfo{.{
-            .flags = .{},
-            .stage_count = shader_stages.len,
-            .p_stages = &shader_stages,
-            .p_vertex_input_state = &vertex_input_info,
-            .p_input_assembly_state = &input_assembly,
-            .p_tessellation_state = null,
-            .p_viewport_state = &viewport_state,
-            .p_rasterization_state = &rasterizer,
-            .p_multisample_state = &multisampling,
-            .p_depth_stencil_state = &depth_stencil,
-            .p_color_blend_state = &color_blending,
-            .p_dynamic_state = &dynamic_state,
-            .layout = pipeline_layout,
-            .render_pass = render_pass,
-            .subpass = 0,
-            .base_pipeline_handle = .null_handle,
-            .base_pipeline_index = -1,
-        }};
-
-        var pipeline: vk.Pipeline = undefined;
-        _ = try self.vkd.createGraphicsPipelines(
-            self.device,
-            .null_handle,
-            pipeline_info.len,
-            &pipeline_info,
-            null,
-            @ptrCast([*]vk.Pipeline, &pipeline),
-        );
-
-        try self.pipelines.append(GraphicsPipeline {
-            .render_pass = render_pass,
-            .descriptor_set_layout = descriptor_set_layout,
-            .pipeline = pipeline,
-            .pipeline_layout = pipeline_layout,
-        });
-
-        return ResourceHandle { .value = self.pipelines.items.len - 1 };
-    }
-
-    pub fn destroy_graphics_pipeline(self: *Self, handle: ResourceHandle) !void {
-        Logger.debug("destroy graphics-pipeline '{}'\n", .{ handle.value });
-
-        var pipeline = self.pipelines.items[handle.value];
-        self.vkd.destroyPipeline(self.device, pipeline.pipeline, null);
-        self.vkd.destroyPipelineLayout(self.device, pipeline.pipeline_layout, null);
-        self.vkd.destroyRenderPass(self.device, pipeline.render_pass, null);
-        self.vkd.destroyDescriptorSetLayout(self.device, pipeline.descriptor_set_layout, null);
-    }
-
-    pub fn get_graphics_pipeline(self: *Self, handle: ResourceHandle) GraphicsPipeline {
-        return self.pipelines.items[handle.value];
-    }
-
     fn create_framebuffers(self: *Self) !void {
         self.swap_chain_framebuffers = try self.allocator.alloc(vk.Framebuffer, self.swap_chain_image_views.?.len);
 
@@ -729,10 +561,9 @@ pub const VulkanBackend = struct {
             const depth_image = self.get_image(self.depth_image_handle);
             const attachments = [_]vk.ImageView{ self.swap_chain_image_views.?[i], depth_image.view };
 
-            const pipeline = self.get_graphics_pipeline(self.pipeline_handle);
             framebuffer.* = try self.vkd.createFramebuffer(self.device, &.{
                 .flags = .{},
-                .render_pass = pipeline.render_pass,
+                .render_pass = self.render_pass,
                 .attachment_count = attachments.len,
                 .p_attachments = &attachments,
                 .width = self.swap_chain_extent.width,
@@ -1031,62 +862,66 @@ pub const VulkanBackend = struct {
         return index_buffer_handle;
     }
 
-    fn create_uniform_buffers(self: *Self) !void {
+    fn create_uniform_buffers(self: *Self) ![]ResourceHandle {
         const buffer_size: vk.DeviceSize = @sizeOf(UniformBufferObject);
 
-        self.uniform_buffer_handles = try self.allocator.alloc(ResourceHandle, MAX_FRAMES_IN_FLIGHT);
+        var uniform_buffer_handles = try self.allocator.alloc(ResourceHandle, config.MAX_FRAMES_IN_FLIGHT);
 
         var i: usize = 0;
-        while (i < MAX_FRAMES_IN_FLIGHT) : (i += 1) {
-            self.uniform_buffer_handles.?[i] = try self.create_buffer(buffer_size, .{ .uniform_buffer_bit = true }, .{ .host_visible_bit = true, .host_coherent_bit = true });
+        while (i < config.MAX_FRAMES_IN_FLIGHT) : (i += 1) {
+            uniform_buffer_handles[i] = try self.create_buffer(buffer_size, .{ .uniform_buffer_bit = true }, .{ .host_visible_bit = true, .host_coherent_bit = true });
         }
+
+        return uniform_buffer_handles;
     }
 
-    fn create_descriptor_pool(self: *Self) !void {
+    fn create_descriptor_pool(self: *Self) !vk.DescriptorPool {
         const pool_sizes = [_]vk.DescriptorPoolSize{
             .{
                 .type = .uniform_buffer,
-                .descriptor_count = MAX_FRAMES_IN_FLIGHT,
+                .descriptor_count = config.MAX_FRAMES_IN_FLIGHT,
             },
             .{
                 .type = .combined_image_sampler,
-                .descriptor_count = MAX_FRAMES_IN_FLIGHT,
+                .descriptor_count = config.MAX_FRAMES_IN_FLIGHT,
             },
         };
+
         const pool_info = vk.DescriptorPoolCreateInfo{
             .flags = .{},
             .pool_size_count = pool_sizes.len,
             .p_pool_sizes = &pool_sizes,
-            .max_sets = MAX_FRAMES_IN_FLIGHT,
+            .max_sets = config.MAX_FRAMES_IN_FLIGHT,
         };
-        self.descriptor_pool = try self.vkd.createDescriptorPool(self.device, &pool_info, null);
+
+        return try self.vkd.createDescriptorPool(self.device, &pool_info, null);
     }
 
-    fn create_descriptor_sets(self: *Self, texture_image_handle: ResourceHandle) !void {
-        const pipeline = self.get_graphics_pipeline(self.pipeline_handle);
-        const layouts = [_]vk.DescriptorSetLayout{ pipeline.descriptor_set_layout, pipeline.descriptor_set_layout };
+    fn create_descriptor_sets(self: *Self, texture_image: ResourceHandle, pipeline: ResourceHandle, descriptor_pool: vk.DescriptorPool, uniform_buffer_handles: []ResourceHandle) ![]vk.DescriptorSet{
+        const pipeline_data = self.get_graphics_pipeline(pipeline);
+        const layouts = [_]vk.DescriptorSetLayout{ pipeline_data.descriptor_set_layout, pipeline_data.descriptor_set_layout };
         const alloc_info = vk.DescriptorSetAllocateInfo{
-            .descriptor_pool = self.descriptor_pool,
-            .descriptor_set_count = MAX_FRAMES_IN_FLIGHT,
+            .descriptor_pool = descriptor_pool,
+            .descriptor_set_count = config.MAX_FRAMES_IN_FLIGHT,
             .p_set_layouts = &layouts,
         };
-        self.descriptor_sets = try self.allocator.alloc(vk.DescriptorSet, MAX_FRAMES_IN_FLIGHT);
+        var descriptor_sets = try self.allocator.alloc(vk.DescriptorSet, config.MAX_FRAMES_IN_FLIGHT);
 
-        try self.vkd.allocateDescriptorSets(self.device, &alloc_info, self.descriptor_sets.?.ptr);
+        try self.vkd.allocateDescriptorSets(self.device, &alloc_info, descriptor_sets.ptr);
 
-        for (self.descriptor_sets.?, 0..) |descriptor_set, i| {
-            const buffer = self.get_buffer(self.uniform_buffer_handles.?[i]);
+        for (descriptor_sets, 0..) |descriptor_set, i| {
+            const buffer = self.get_buffer(uniform_buffer_handles[i]);
             const buffer_info = [_]vk.DescriptorBufferInfo{.{
                 .buffer = buffer.buf,
                 .offset = 0,
                 .range = @sizeOf(UniformBufferObject),
             }};
 
-            const texture_image = self.get_image(texture_image_handle);
+            const texture_image_data = self.get_image(texture_image);
             const image_info = [_]vk.DescriptorImageInfo{.{
                 .image_layout = .shader_read_only_optimal,
-                .image_view = texture_image.view,
-                .sampler = texture_image.sampler.?, // TODO (lm): don't unwrap
+                .image_view = texture_image_data.view,
+                .sampler = texture_image_data.sampler.?, // TODO (lm): don't unwrap
             }};
 
             const descriptor_writes = [_]vk.WriteDescriptorSet{
@@ -1114,6 +949,8 @@ pub const VulkanBackend = struct {
 
             self.vkd.updateDescriptorSets(self.device, descriptor_writes.len, &descriptor_writes, 0, undefined);
         }
+
+        return descriptor_sets;
     }
 
     fn create_buffer(self: *Self, size: vk.DeviceSize, usage: vk.BufferUsageFlags, properties: vk.MemoryPropertyFlags) !ResourceHandle {
@@ -1219,7 +1056,7 @@ pub const VulkanBackend = struct {
     }
 
     fn create_command_buffers(self: *Self) !void {
-        self.command_buffers = try self.allocator.alloc(vk.CommandBuffer, MAX_FRAMES_IN_FLIGHT);
+        self.command_buffers = try self.allocator.alloc(vk.CommandBuffer, config.MAX_FRAMES_IN_FLIGHT);
 
         try self.vkd.allocateCommandBuffers(self.device, &.{
             .command_pool = self.command_pool,
@@ -1228,7 +1065,7 @@ pub const VulkanBackend = struct {
         }, self.command_buffers.?.ptr);
     }
 
-    fn record_command_buffer(self: *Self, command_buffer: vk.CommandBuffer, image_index: u32, render_data: *const RenderData) !void {
+    fn record_command_buffer(self: *Self, command_buffer: vk.CommandBuffer, image_index: u32, render_data: *const RenderData, program_data: *const ShaderProgram) !void {
         try self.vkd.beginCommandBuffer(command_buffer, &.{
             .flags = .{},
             .p_inheritance_info = null,
@@ -1239,9 +1076,9 @@ pub const VulkanBackend = struct {
             .{ .depth_stencil = .{ .depth = 1.0, .stencil = 0 } },
         };
 
-        const pipeline = self.get_graphics_pipeline(self.pipeline_handle);
+        const pipeline_data = self.get_graphics_pipeline(program_data.pipeline);
         const render_pass_info = vk.RenderPassBeginInfo{
-            .render_pass = pipeline.render_pass,
+            .render_pass = pipeline_data.render_pass,
             .framebuffer = self.swap_chain_framebuffers.?[image_index],
             .render_area = vk.Rect2D{
                 .offset = .{ .x = 0, .y = 0 },
@@ -1253,7 +1090,7 @@ pub const VulkanBackend = struct {
 
         self.vkd.cmdBeginRenderPass(command_buffer, &render_pass_info, .@"inline");
         {
-            self.vkd.cmdBindPipeline(command_buffer, .graphics, pipeline.pipeline);
+            self.vkd.cmdBindPipeline(command_buffer, .graphics, pipeline_data.pipeline);
 
             const viewports = [_]vk.Viewport{.{
                 .x = 0,
@@ -1279,7 +1116,18 @@ pub const VulkanBackend = struct {
 
                 self.vkd.cmdBindVertexBuffers(command_buffer, 0, 1, &vertex_buffers, &offsets);
                 self.vkd.cmdBindIndexBuffer(command_buffer, index_buffer, 0, vk.IndexType.uint16);
-                self.vkd.cmdBindDescriptorSets(command_buffer, .graphics, pipeline.pipeline_layout, 0, 1, @ptrCast([*]const vk.DescriptorSet, &self.descriptor_sets.?[self.current_frame]), 0, undefined);
+                self.vkd.cmdBindDescriptorSets(
+                    command_buffer,
+                    .graphics,
+                    pipeline_data.pipeline_layout,
+                    0,
+                    1,
+                    @ptrCast([*]const
+                    vk.DescriptorSet,
+                    &program_data.descriptor_sets.?[self.current_frame]),
+                    0,
+                    undefined
+                );
 
                 self.vkd.cmdDrawIndexed(command_buffer, index_count, 1, 0, 0, 0);
             }
@@ -1290,19 +1138,19 @@ pub const VulkanBackend = struct {
     }
 
     fn create_sync_objects(self: *Self) !void {
-        self.image_available_semaphores = try self.allocator.alloc(vk.Semaphore, MAX_FRAMES_IN_FLIGHT);
-        self.render_finished_semaphores = try self.allocator.alloc(vk.Semaphore, MAX_FRAMES_IN_FLIGHT);
-        self.in_flight_fences = try self.allocator.alloc(vk.Fence, MAX_FRAMES_IN_FLIGHT);
+        self.image_available_semaphores = try self.allocator.alloc(vk.Semaphore, config.MAX_FRAMES_IN_FLIGHT);
+        self.render_finished_semaphores = try self.allocator.alloc(vk.Semaphore, config.MAX_FRAMES_IN_FLIGHT);
+        self.in_flight_fences = try self.allocator.alloc(vk.Fence, config.MAX_FRAMES_IN_FLIGHT);
 
         var i: usize = 0;
-        while (i < MAX_FRAMES_IN_FLIGHT) : (i += 1) {
+        while (i < config.MAX_FRAMES_IN_FLIGHT) : (i += 1) {
             self.image_available_semaphores.?[i] = try self.vkd.createSemaphore(self.device, &.{ .flags = .{} }, null);
             self.render_finished_semaphores.?[i] = try self.vkd.createSemaphore(self.device, &.{ .flags = .{} }, null);
             self.in_flight_fences.?[i] = try self.vkd.createFence(self.device, &.{ .flags = .{ .signaled_bit = true } }, null);
         }
     }
 
-    fn update_uniform_buffer(self: *Self, current_image: u32) !void {
+    fn update_uniform_buffer(self: *Self, current_image: u32, uniform_buffer_handles: []ResourceHandle) !void {
         const time: f32 = (@intToFloat(f32, (try std.time.Instant.now()).since(self.start_time)) / @intToFloat(f32, std.time.ns_per_s));
 
         var ubo = UniformBufferObject{
@@ -1312,13 +1160,13 @@ pub const VulkanBackend = struct {
         };
         ubo.proj.data[1][1] *= -1;
 
-        const buffer = self.get_buffer(self.uniform_buffer_handles.?[current_image]);
+        const buffer = self.get_buffer(uniform_buffer_handles[current_image]);
         const data = try self.vkd.mapMemory(self.device, buffer.mem, 0, @sizeOf(UniformBufferObject), .{});
         std.mem.copy(u8, @ptrCast([*]u8, data.?)[0..@sizeOf(UniformBufferObject)], std.mem.asBytes(&ubo));
         self.vkd.unmapMemory(self.device, buffer.mem);
     }
 
-    pub fn draw_frame(self: *Self, render_data: *const RenderData) !void {
+    pub fn draw_frame(self: *Self, render_data: *const RenderData, program: ResourceHandle) !void {
         _ = try self.vkd.waitForFences(self.device, 1, @ptrCast([*]const vk.Fence, &self.in_flight_fences.?[self.current_frame]), vk.TRUE, std.math.maxInt(u64));
 
         const result = self.vkd.acquireNextImageKHR(self.device, self.swap_chain, std.math.maxInt(u64), self.image_available_semaphores.?[self.current_frame], .null_handle) catch |err| switch (err) {
@@ -1333,12 +1181,13 @@ pub const VulkanBackend = struct {
             return error.ImageAcquireFailed;
         }
 
-        try self.update_uniform_buffer(self.current_frame);
+        const program_data = self.get_shader_program(program);
+        try self.update_uniform_buffer(self.current_frame, program_data.uniform_buffers.?);
 
         try self.vkd.resetFences(self.device, 1, @ptrCast([*]const vk.Fence, &self.in_flight_fences.?[self.current_frame]));
 
         try self.vkd.resetCommandBuffer(self.command_buffers.?[self.current_frame], .{});
-        try self.record_command_buffer(self.command_buffers.?[self.current_frame], result.image_index, render_data);
+        try self.record_command_buffer(self.command_buffers.?[self.current_frame], result.image_index, render_data, program_data);
 
         const wait_semaphores = [_]vk.Semaphore{self.image_available_semaphores.?[self.current_frame]};
         const wait_stages = [_]vk.PipelineStageFlags{.{ .color_attachment_output_bit = true }};
@@ -1374,7 +1223,7 @@ pub const VulkanBackend = struct {
             return error.ImagePresentFailed;
         }
 
-        self.current_frame = (self.current_frame + 1) % MAX_FRAMES_IN_FLIGHT;
+        self.current_frame = (self.current_frame + 1) % config.MAX_FRAMES_IN_FLIGHT;
     }
 
     fn create_shader_module(self: *Self, code: []const u8) !vk.ShaderModule {
@@ -1565,4 +1414,228 @@ pub const VulkanBackend = struct {
 
         return vk.FALSE;
     }
+
+    // ------------------------------------------
+
+    fn create_graphics_pipeline(self: *Self, render_pass: vk.RenderPass, descriptor_set_layout: vk.DescriptorSetLayout) !ResourceHandle {
+        Logger.debug("create graphics-pipeline '{}'\n", .{ self.pipelines.items.len });
+
+        const vert_shader_module: vk.ShaderModule = try self.create_shader_module(&resources.vert_27);
+        defer self.vkd.destroyShaderModule(self.device, vert_shader_module, null);
+        const frag_shader_module: vk.ShaderModule = try self.create_shader_module(&resources.frag_27);
+        defer self.vkd.destroyShaderModule(self.device, frag_shader_module, null);
+
+        const shader_stages = [_]vk.PipelineShaderStageCreateInfo{
+            .{
+                .flags = .{},
+                .stage = .{ .vertex_bit = true },
+                .module = vert_shader_module,
+                .p_name = "main",
+                .p_specialization_info = null,
+            },
+            .{
+                .flags = .{},
+                .stage = .{ .fragment_bit = true },
+                .module = frag_shader_module,
+                .p_name = "main",
+                .p_specialization_info = null,
+            },
+        };
+
+        const binding_description    = Vertex.get_binding_description();
+        const attribute_descriptions = Vertex.get_attribute_descriptions();
+
+        const vertex_input_info = vk.PipelineVertexInputStateCreateInfo{
+            .flags = .{},
+            .vertex_binding_description_count = 1,
+            .p_vertex_binding_descriptions = @ptrCast([*]const vk.VertexInputBindingDescription, &binding_description),
+            .vertex_attribute_description_count = attribute_descriptions.len,
+            .p_vertex_attribute_descriptions = &attribute_descriptions,
+        };
+
+        const input_assembly = vk.PipelineInputAssemblyStateCreateInfo{
+            .flags = .{},
+            .topology = .triangle_list,
+            .primitive_restart_enable = vk.FALSE,
+        };
+
+        const viewport_state = vk.PipelineViewportStateCreateInfo{
+            .flags = .{},
+            .viewport_count = 1,
+            .p_viewports = undefined,
+            .scissor_count = 1,
+            .p_scissors = undefined,
+        };
+
+        const rasterizer = vk.PipelineRasterizationStateCreateInfo{
+            .flags = .{},
+            .depth_clamp_enable = vk.FALSE,
+            .rasterizer_discard_enable = vk.FALSE,
+            .polygon_mode = .fill,
+            .cull_mode = .{ .back_bit = true },
+            .front_face = .counter_clockwise,
+            .depth_bias_enable = vk.FALSE,
+            .depth_bias_constant_factor = 0,
+            .depth_bias_clamp = 0,
+            .depth_bias_slope_factor = 0,
+            .line_width = 1,
+        };
+
+        const multisampling = vk.PipelineMultisampleStateCreateInfo{
+            .flags = .{},
+            .rasterization_samples = .{ .@"1_bit" = true },
+            .sample_shading_enable = vk.FALSE,
+            .min_sample_shading = 1,
+            .p_sample_mask = null,
+            .alpha_to_coverage_enable = vk.FALSE,
+            .alpha_to_one_enable = vk.FALSE,
+        };
+
+        const depth_stencil = vk.PipelineDepthStencilStateCreateInfo{
+            .flags = .{},
+            .depth_test_enable = vk.TRUE,
+            .depth_write_enable = vk.TRUE,
+            .depth_compare_op = vk.CompareOp.less,
+            .depth_bounds_test_enable = vk.FALSE,
+            .stencil_test_enable = vk.FALSE,
+            .front = undefined,
+            .back = undefined,
+            .min_depth_bounds = 0,
+            .max_depth_bounds = 1,
+        };
+
+        const color_blend_attachment = [_]vk.PipelineColorBlendAttachmentState{.{
+            .blend_enable = vk.FALSE,
+            .src_color_blend_factor = .one,
+            .dst_color_blend_factor = .zero,
+            .color_blend_op = .add,
+            .src_alpha_blend_factor = .one,
+            .dst_alpha_blend_factor = .zero,
+            .alpha_blend_op = .add,
+            .color_write_mask = .{ .r_bit = true, .g_bit = true, .b_bit = true, .a_bit = true },
+        }};
+
+        const color_blending = vk.PipelineColorBlendStateCreateInfo{
+            .flags = .{},
+            .logic_op_enable = vk.FALSE,
+            .logic_op = .copy,
+            .attachment_count = color_blend_attachment.len,
+            .p_attachments = &color_blend_attachment,
+            .blend_constants = [_]f32{ 0, 0, 0, 0 },
+        };
+        const dynamic_states = [_]vk.DynamicState{ .viewport, .scissor };
+
+        const dynamic_state = vk.PipelineDynamicStateCreateInfo{
+            .flags = .{},
+            .dynamic_state_count = dynamic_states.len,
+            .p_dynamic_states = &dynamic_states,
+        };
+
+        const pipeline_layout = try self.vkd.createPipelineLayout(self.device, &.{
+            .flags = .{},
+            .set_layout_count = 1,
+            .p_set_layouts = @ptrCast([*]const vk.DescriptorSetLayout, &descriptor_set_layout),
+            .push_constant_range_count = 0,
+            .p_push_constant_ranges = undefined,
+        }, null);
+
+        const pipeline_info = [_]vk.GraphicsPipelineCreateInfo{.{
+            .flags = .{},
+            .stage_count = shader_stages.len,
+            .p_stages = &shader_stages,
+            .p_vertex_input_state = &vertex_input_info,
+            .p_input_assembly_state = &input_assembly,
+            .p_tessellation_state = null,
+            .p_viewport_state = &viewport_state,
+            .p_rasterization_state = &rasterizer,
+            .p_multisample_state = &multisampling,
+            .p_depth_stencil_state = &depth_stencil,
+            .p_color_blend_state = &color_blending,
+            .p_dynamic_state = &dynamic_state,
+            .layout = pipeline_layout,
+            .render_pass = render_pass,
+            .subpass = 0,
+            .base_pipeline_handle = .null_handle,
+            .base_pipeline_index = -1,
+        }};
+
+        var pipeline: vk.Pipeline = undefined;
+        _ = try self.vkd.createGraphicsPipelines(
+            self.device,
+            .null_handle,
+            pipeline_info.len,
+            &pipeline_info,
+            null,
+            @ptrCast([*]vk.Pipeline, &pipeline),
+        );
+
+        try self.pipelines.append(GraphicsPipeline {
+            .render_pass = render_pass,
+            .descriptor_set_layout = descriptor_set_layout,
+            .pipeline = pipeline,
+            .pipeline_layout = pipeline_layout,
+        });
+
+        return ResourceHandle { .value = self.pipelines.items.len - 1 };
+    }
+
+    fn destroy_graphics_pipeline(self: *Self, handle: ResourceHandle) void {
+        Logger.debug("destroy graphics-pipeline '{}'\n", .{ handle.value });
+
+        var pipeline = self.pipelines.items[handle.value];
+        self.vkd.destroyPipeline(self.device, pipeline.pipeline, null);
+        self.vkd.destroyPipelineLayout(self.device, pipeline.pipeline_layout, null);
+        self.vkd.destroyRenderPass(self.device, pipeline.render_pass, null);
+        self.vkd.destroyDescriptorSetLayout(self.device, pipeline.descriptor_set_layout, null);
+    }
+
+    pub fn get_graphics_pipeline(self: *Self, handle: ResourceHandle) GraphicsPipeline {
+        return self.pipelines.items[handle.value];
+    }
+
+    // ------------------------------------------
+
+    pub fn create_shader_program(self: *Self, texture_image: ResourceHandle) !ResourceHandle {
+        Logger.info("creating shader-program\n", .{});
+
+        const descriptor_set_layout = try self.create_descriptor_set_layout();
+        const pipeline = try self.create_graphics_pipeline(self.render_pass, descriptor_set_layout);
+
+        const uniform_buffers = try self.create_uniform_buffers();
+        const descriptor_pool = try self.create_descriptor_pool();
+        const descriptor_sets = try self.create_descriptor_sets(texture_image, pipeline, descriptor_pool, uniform_buffers);
+
+        const slot = self.programs.add(.{
+            .descriptor_set_layout = descriptor_set_layout,
+            .pipeline = pipeline,
+            .uniform_buffers = uniform_buffers,
+            .descriptor_pool = descriptor_pool,
+            .descriptor_sets = descriptor_sets,
+        });
+
+        return ResourceHandle { .value = slot };
+    }
+
+    pub fn destroy_shader_program(self: *Self, handle: ResourceHandle) void {
+        Logger.info("destroying shader-program '{}'\n", .{ handle });
+        var program_data = self.get_shader_program(handle);
+
+        if (program_data.uniform_buffers != null) {
+            for (program_data.uniform_buffers.?) |uniform_buffer| {
+                self.free_buffer(uniform_buffer);
+            }
+            self.allocator.free(program_data.uniform_buffers.?);
+        }
+
+        if (program_data.descriptor_pool != .null_handle) self.vkd.destroyDescriptorPool(self.device, program_data.descriptor_pool, null);
+        if (program_data.descriptor_sets != null) self.allocator.free(program_data.descriptor_sets.?);
+
+        self.destroy_graphics_pipeline(program_data.pipeline);
+    }
+
+    pub fn get_shader_program(self: *const Self, handle: ResourceHandle) *const ShaderProgram {
+        return self.programs.get_ref(handle.value);
+    }
+
+    // ------------------------------------------
 };

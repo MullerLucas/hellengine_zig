@@ -34,6 +34,21 @@ pub fn SlotArray(comptime T: type, comptime array_size: usize) type {
             self.is_free[idx] = true;
         }
 
+        pub fn get(self: *const Self, idx: usize) T {
+            assert(!self.is_free[idx]);
+            return self.data[idx];
+        }
+
+        pub fn get_mut(self: *const Self, idx: usize) *T {
+            assert(!self.is_free[idx]);
+            return &self.data[idx];
+        }
+
+        pub inline fn get_ref(self: *const Self, idx: usize) *const T {
+            assert(!self.is_free[idx]);
+            return &self.data[idx];
+        }
+
         pub fn to_string(self: *const Self) [size*2]u8 {
             var result: [size*2]u8 = undefined;
             for (0..(size / 2)) |idx| {

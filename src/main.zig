@@ -38,21 +38,9 @@ pub fn main() !void {
     var scene = try TestScene.init(allocator, &renderer);
     defer scene.deinit();
 
-    try renderer.late_init(scene.render_data.meshes[0].texture);
-
-    // var app = VulkanBackend.init(allocator) catch |err| {
-    //     std.log.err("application failed to init with error: {any}", .{err});
-    //     return;
-    // };
-    // defer app.deinit();
-    // app.run() catch |err| {
-    //     std.log.err("application exited with error: {any}", .{err});
-    //     return;
-    // };
-
     while (!window.should_close()) {
         GlfwWindow.poll_events();
-        try renderer.draw_frame(&scene.render_data);
+        try renderer.draw_frame(&scene.render_data, scene.program);
     }
 
     try renderer.device_wait_idle();

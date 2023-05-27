@@ -4,6 +4,9 @@ const za  = @import("zalgebra");
 const core_types = @import("../core/core_types.zig");
 const ResourceHandle = core_types.ResourceHandle;
 
+const core = @import("../core/core.zig");
+const config = @import("../config.zig");
+
 const assert = std.debug.assert;
 
 // ----------------------------------------------
@@ -55,7 +58,7 @@ pub const Vertex = struct {
 
 // ----------------------------------------------
 
-pub const Mesh = struct{
+pub const Mesh = struct {
     vertices: [4]Vertex,
     indices : [6]u16,
     vertex_buffer: ResourceHandle = ResourceHandle.invalid,
@@ -64,6 +67,16 @@ pub const Mesh = struct{
 };
 
 pub const MeshList = std.ArrayList(Mesh);
+
+// ----------------------------------------------
+
+pub const ShaderProgram = struct {
+    descriptor_set_layout: vk.DescriptorSetLayout,
+    pipeline: ResourceHandle,
+    uniform_buffers: ?[]ResourceHandle = null,
+    descriptor_pool: vk.DescriptorPool   = .null_handle,
+    descriptor_sets: ?[]vk.DescriptorSet = null,
+};
 
 // ----------------------------------------------
 
