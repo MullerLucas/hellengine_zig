@@ -25,6 +25,9 @@ pub const TestScene = struct {
     pub fn init(allocator: std.mem.Allocator, renderer: *Renderer) !TestScene {
         Logger.info("initializing test-scene\n", .{});
 
+        var timer = try core.time.SimpleTimer.init();
+        defer Logger.debug("test-scene initialized in {} us\n", .{timer.read_us()});
+
         var self = TestScene {
             .renderer    = renderer,
             .meshes      = try MeshList.initCapacity(allocator, 3),

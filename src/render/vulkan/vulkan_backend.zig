@@ -180,23 +180,7 @@ pub const VulkanBackend = struct {
 
         self.cleanup_swap_chain();
 
-        // try self.destroy_graphics_pipeline(self.pipeline_handle);
-        // self.pipelines.deinit();
-
-        // if (self.uniform_buffer_handles != null) {
-        //     for (self.uniform_buffer_handles.?) |uniform_buffer_handle| {
-        //         self.free_buffer(uniform_buffer_handle);
-        //     }
-        //     self.allocator.free(self.uniform_buffer_handles.?);
-        // }
-
-        // if (self.descriptor_pool != .null_handle) self.vkd.destroyDescriptorPool(self.device, self.descriptor_pool, null);
-        // if (self.descriptor_sets != null) self.allocator.free(self.descriptor_sets.?);
-
         self.images.deinit(self.allocator);
-
-        // if (self.descriptor_set_layout != .null_handle) self.vkd.destroyDescriptorSetLayout(self.device, self.descriptor_set_layout, null);
-
         self.buffers.deinit(self.allocator);
 
         if (self.render_finished_semaphores != null) {
@@ -400,6 +384,8 @@ pub const VulkanBackend = struct {
         const surface_format: vk.SurfaceFormatKHR = choose_swap_surface_format(swap_chain_support.formats.?);
         const present_mode: vk.PresentModeKHR = choose_swap_present_mode(swap_chain_support.present_modes.?);
         const extent: vk.Extent2D = try self.choose_swap_extent(swap_chain_support.capabilities);
+
+        Logger.debug("using present-mode '{}'\n", .{present_mode});
 
         var image_count = swap_chain_support.capabilities.min_image_count + 1;
         if (swap_chain_support.capabilities.max_image_count > 0) {
@@ -1235,13 +1221,15 @@ pub const VulkanBackend = struct {
     }
 
     fn choose_swap_present_mode(available_present_modes: []vk.PresentModeKHR) vk.PresentModeKHR {
-        for (available_present_modes) |available_present_mode| {
-            if (available_present_mode == .mailbox_khr) {
-                return available_present_mode;
-            }
-        }
-
-        return .fifo_khr;
+        _ = available_present_modes;
+        return .immediate_khr;
+        // for (available_present_modes) |available_present_mode| {
+        //     if (available_present_mode == .mailbox_khr) {
+        //         return available_present_mode;
+        //     }
+        // }
+        //
+        // return .fifo_khr;
     }
 
     fn choose_swap_extent(self: *Self, capabilities: vk.SurfaceCapabilitiesKHR) !vk.Extent2D {

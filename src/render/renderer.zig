@@ -4,6 +4,7 @@ const GlfwWindow = @import("../GlfwWindow.zig");
 
 const core   = @import("../core/core.zig");
 const ResourceHandle = core.ResourceHandle;
+const FrameTimer = core.time.FrameTimer(4096);
 
 const vulkan        = @import("./vulkan/vulkan.zig");
 const VulkanBackend = vulkan.VulkanBackend;
@@ -18,13 +19,18 @@ const ShaderConfig = render.ShaderConfig;
 // ----------------------------------------------
 
 pub const Renderer = struct {
+    frame_timer: FrameTimer,
     backend: VulkanBackend,
 
     pub fn init(allocator: std.mem.Allocator, window: *GlfwWindow) !Renderer {
         Logger.info("initializing renderer-frontend\n", .{});
 
+        var timer = try core.time.SimpleTimer.init();
+        defer Logger.debug("renderer initialized in {} us\n", .{timer.read_us()});
+
         return Renderer {
-            .backend = try VulkanBackend.init(allocator, window),
+            .frame_timer = try FrameTimer.init(),
+            .backend     = try VulkanBackend.init(allocator, window),
         };
     }
 
@@ -34,7 +40,13 @@ pub const Renderer = struct {
     }
 
     pub fn draw_frame(self: *Renderer, render_data: *const RenderData, program: *const ShaderProgram) !void {
+        if (self.frame_timer.is_frame_0()) {
+            Logger.debug("Timings - frame (us): {}\n", .{self.frame_timer.avg_frame_time_us()});
+        }
+
+        self.frame_timer.start_frame();
         try self.backend.draw_frame(render_data, program.internals_h);
+        self.frame_timer.stop_frame();
     }
 
     pub fn device_wait_idle(self: *Renderer) !void {
