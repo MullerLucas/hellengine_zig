@@ -19,7 +19,7 @@ const Vertex              = render.Vertex;
 const RenderData          = render.RenderData;
 const UniformBufferObject = render.UniformBufferObject;
 // const ShaderProgram       = render.ShaderProgram;
-const ShaderConfig        = render.ShaderConfig;
+const ShaderInfo        = render.ShaderInfo;
 
 const vulkan     = @import("./vulkan.zig");
 const Logger     = vulkan.Logger;
@@ -31,6 +31,7 @@ const QueueFamilyIndices = vulkan.QueueFamilyIndices;
 const GraphicsPipeline   = vulkan.GraphicsPipeline;
 
 const ShaderInternals = vulkan.ShaderInternals;
+const ShaderScope = render.shader.ShaderScope;
 
 
 const c = @cImport({
@@ -63,6 +64,8 @@ pub const SwapChainSupportDetails = struct {
 // ----------------------------------------------
 
 const ShaderInternalsArray = SlotArray(ShaderInternals, 64);
+const DescriptorSetLayoutBindingStack = core.StackArray(vk.DescriptorSetLayoutBinding, 2);
+const DescriptorImageInfoStack = core.StackArray(vk.DescriptorImageInfo, CFG.shader_max_textures_per_scope);
 
 // ----------------------------------------------
 
@@ -385,7 +388,7 @@ pub const VulkanBackend = struct {
         const present_mode: vk.PresentModeKHR = choose_swap_present_mode(swap_chain_support.present_modes.?);
         const extent: vk.Extent2D = try self.choose_swap_extent(swap_chain_support.capabilities);
 
-        Logger.debug("using present-mode '{}'\n", .{present_mode});
+        Logger.debug("using present-mode {}\n", .{present_mode});
 
         var image_count = swap_chain_support.capabilities.min_image_count + 1;
         if (swap_chain_support.capabilities.max_image_count > 0) {
@@ -504,33 +507,6 @@ pub const VulkanBackend = struct {
         }, null);
     }
 
-    fn create_descriptor_set_layout(self: *Self) !vk.DescriptorSetLayout {
-        const bindings = [_]vk.DescriptorSetLayoutBinding{
-            .{
-                .binding = 0,
-                .descriptor_count = 1,
-                .descriptor_type = .uniform_buffer,
-                .p_immutable_samplers = null,
-                .stage_flags = .{ .vertex_bit = true },
-            },
-            .{
-                .binding = 1,
-                .descriptor_count = 1,
-                .descriptor_type = .combined_image_sampler,
-                .p_immutable_samplers = null,
-                .stage_flags = .{ .fragment_bit = true },
-            },
-        };
-
-        const layout_info = vk.DescriptorSetLayoutCreateInfo{
-            .flags = .{},
-            .binding_count = bindings.len,
-            .p_bindings = &bindings,
-        };
-
-        return try self.vkd.createDescriptorSetLayout(self.device, &layout_info, null);
-    }
-
     fn create_framebuffers(self: *Self) !void {
         self.swap_chain_framebuffers = try self.allocator.alloc(vk.Framebuffer, self.swap_chain_image_views.?.len);
 
@@ -606,7 +582,7 @@ pub const VulkanBackend = struct {
 
         const staging_buf_handle = try self.create_buffer(image_size, .{ .transfer_src_bit = true }, .{ .host_visible_bit = true, .host_coherent_bit = true });
         const staging_buffer     = self.get_buffer(staging_buf_handle);
-        defer self.free_buffer(staging_buf_handle);
+        defer self.free_buffer_h(staging_buf_handle);
 
         const data = try self.vkd.mapMemory(self.device, staging_buffer.mem, 0, image_size, .{});
         std.mem.copy(u8, @ptrCast([*]u8, data.?)[0..image_size], pixels[0..image_size]);
@@ -670,7 +646,7 @@ pub const VulkanBackend = struct {
     }
 
     fn create_image(self: *Self, image_width: u32, image_height: u32, format: vk.Format, tiling: vk.ImageTiling, usage: vk.ImageUsageFlags, properties: vk.MemoryPropertyFlags) !ResourceHandle {
-        Logger.debug("create image'{}'\n", .{ self.images.len });
+        Logger.debug("create image{}\n", .{ self.images.len });
 
         const image_info = vk.ImageCreateInfo{
             .flags = .{},
@@ -722,7 +698,7 @@ pub const VulkanBackend = struct {
     }
 
     pub fn free_image(self: *Self, handle: ResourceHandle) void {
-        Logger.debug("free image '{}'\n", .{ handle.value });
+        Logger.debug("free image {}\n", .{ handle.value });
 
         const image = self.get_image(handle);
         self.vkd.destroyImageView(self.device, image.view, null);
@@ -805,7 +781,7 @@ pub const VulkanBackend = struct {
 
         const staging_buffer_handle = try create_buffer(self, buffer_size, .{ .transfer_src_bit = true }, .{ .host_visible_bit = true, .host_coherent_bit = true });
         const staging_buffer = self.get_buffer(staging_buffer_handle);
-        defer self.free_buffer(staging_buffer_handle);
+        defer self.free_buffer_h(staging_buffer_handle);
 
         const data = try self.vkd.mapMemory(self.device, staging_buffer.mem, 0, buffer_size, .{});
         std.mem.copy(u8, @ptrCast([*]u8, data.?)[0..buffer_size], std.mem.sliceAsBytes(vertices));
@@ -825,7 +801,7 @@ pub const VulkanBackend = struct {
 
         const staging_buffer_handle = try create_buffer(self, buffer_size, .{ .transfer_src_bit = true }, .{ .host_visible_bit = true, .host_coherent_bit = true });
         const staging_buffer = self.get_buffer(staging_buffer_handle);
-        defer self.free_buffer(staging_buffer_handle);
+        defer self.free_buffer_h(staging_buffer_handle);
 
         const data = try self.vkd.mapMemory(self.device, staging_buffer.mem, 0, buffer_size, .{});
         std.mem.copy(u8, @ptrCast([*]u8, data.?)[0..buffer_size], std.mem.sliceAsBytes(indices));
@@ -839,28 +815,33 @@ pub const VulkanBackend = struct {
         return index_buffer_handle;
     }
 
-    fn create_uniform_buffers(self: *Self) ![]ResourceHandle {
-        const buffer_size: vk.DeviceSize = @sizeOf(UniformBufferObject);
+    // fn create_uniform_buffers(self: *Self) ![]ResourceHandle {
+    //     const buffer_size: vk.DeviceSize = @sizeOf(UniformBufferObject);
+    //
+    //     var uniform_buffer_handles = try self.allocator.alloc(ResourceHandle, CFG.MAX_FRAMES_IN_FLIGHT);
+    //
+    //     var i: usize = 0;
+    //     while (i < CFG.MAX_FRAMES_IN_FLIGHT) : (i += 1) {
+    //         // uniform_buffer_handles[i] = try self.create_buffer(buffer_size, .{ .uniform_buffer_bit = true }, .{ .host_visible_bit = true, .host_coherent_bit = true });
+    //         uniform_buffer_handles[i] = try self.create_uniform_buffer(buffer_size);
+    //     }
+    //
+    //     return uniform_buffer_handles;
+    // }
 
-        var uniform_buffer_handles = try self.allocator.alloc(ResourceHandle, CFG.MAX_FRAMES_IN_FLIGHT);
-
-        var i: usize = 0;
-        while (i < CFG.MAX_FRAMES_IN_FLIGHT) : (i += 1) {
-            uniform_buffer_handles[i] = try self.create_buffer(buffer_size, .{ .uniform_buffer_bit = true }, .{ .host_visible_bit = true, .host_coherent_bit = true });
-        }
-
-        return uniform_buffer_handles;
+    inline fn create_uniform_buffer(self: *Self, buffer_size: vk.DeviceSize) !ResourceHandle {
+        return try self.create_buffer(buffer_size, .{ .uniform_buffer_bit = true }, .{ .host_visible_bit = true, .host_coherent_bit = true });
     }
 
     fn create_descriptor_pool(self: *Self) !vk.DescriptorPool {
         const pool_sizes = [_]vk.DescriptorPoolSize{
             .{
                 .type = .uniform_buffer,
-                .descriptor_count = CFG.MAX_FRAMES_IN_FLIGHT,
+                .descriptor_count = CFG.shader_buffer_descriptor_limit,
             },
             .{
                 .type = .combined_image_sampler,
-                .descriptor_count = CFG.MAX_FRAMES_IN_FLIGHT,
+                .descriptor_count = CFG.shader_sampler_descriptor_limit,
             },
         };
 
@@ -868,69 +849,14 @@ pub const VulkanBackend = struct {
             .flags = .{},
             .pool_size_count = pool_sizes.len,
             .p_pool_sizes = &pool_sizes,
-            .max_sets = CFG.MAX_FRAMES_IN_FLIGHT,
+            .max_sets = CFG.shader_descriptor_set_limit,
         };
 
         return try self.vkd.createDescriptorPool(self.device, &pool_info, null);
     }
 
-    fn create_descriptor_sets(self: *Self, texture_image: ResourceHandle, pipeline: *const GraphicsPipeline, descriptor_pool: vk.DescriptorPool, uniform_buffer_handles: []ResourceHandle) ![]vk.DescriptorSet{
-        const layouts = [_]vk.DescriptorSetLayout{ pipeline.descriptor_set_layout, pipeline.descriptor_set_layout };
-        const alloc_info = vk.DescriptorSetAllocateInfo{
-            .descriptor_pool = descriptor_pool,
-            .descriptor_set_count = CFG.MAX_FRAMES_IN_FLIGHT,
-            .p_set_layouts = &layouts,
-        };
-        var descriptor_sets = try self.allocator.alloc(vk.DescriptorSet, CFG.MAX_FRAMES_IN_FLIGHT);
-
-        try self.vkd.allocateDescriptorSets(self.device, &alloc_info, descriptor_sets.ptr);
-
-        for (descriptor_sets, 0..) |descriptor_set, i| {
-            const buffer = self.get_buffer(uniform_buffer_handles[i]);
-            const buffer_info = [_]vk.DescriptorBufferInfo{.{
-                .buffer = buffer.buf,
-                .offset = 0,
-                .range = @sizeOf(UniformBufferObject),
-            }};
-
-            const texture_image_data = self.get_image(texture_image);
-            const image_info = [_]vk.DescriptorImageInfo{.{
-                .image_layout = .shader_read_only_optimal,
-                .image_view = texture_image_data.view,
-                .sampler = texture_image_data.sampler.?, // TODO (lm): don't unwrap
-            }};
-
-            const descriptor_writes = [_]vk.WriteDescriptorSet{
-                .{
-                    .dst_set = descriptor_set,
-                    .dst_binding = 0,
-                    .dst_array_element = 0,
-                    .descriptor_type = .uniform_buffer,
-                    .descriptor_count = 1,
-                    .p_buffer_info = &buffer_info,
-                    .p_image_info = undefined,
-                    .p_texel_buffer_view = undefined,
-                },
-                .{
-                    .dst_set = descriptor_set,
-                    .dst_binding = 1,
-                    .dst_array_element = 0,
-                    .descriptor_type = .combined_image_sampler,
-                    .descriptor_count = 1,
-                    .p_buffer_info = undefined,
-                    .p_image_info = &image_info,
-                    .p_texel_buffer_view = undefined,
-                },
-            };
-
-            self.vkd.updateDescriptorSets(self.device, descriptor_writes.len, &descriptor_writes, 0, undefined);
-        }
-
-        return descriptor_sets;
-    }
-
     fn create_buffer(self: *Self, size: vk.DeviceSize, usage: vk.BufferUsageFlags, properties: vk.MemoryPropertyFlags) !ResourceHandle {
-        Logger.debug("create buffer '{}'\n", .{ self.buffers.len });
+        Logger.debug("create buffer {}\n", .{ self.buffers.len });
 
         const buffer = try self.vkd.createBuffer(self.device, &.{
             .flags = .{},
@@ -957,12 +883,16 @@ pub const VulkanBackend = struct {
         return ResourceHandle { .value = self.buffers.len - 1 };
     }
 
-    pub fn free_buffer(self: *Self, handle: ResourceHandle) void {
-        Logger.debug("free buffer '{}'\n", .{ handle.value });
+    pub fn free_buffer(self: *Self, buffer: Buffer) void {
+        Logger.debug("free buffer\n", .{});
 
-        const buffer = self.get_buffer(handle);
         self.vkd.destroyBuffer(self.device, buffer.buf, null);
-        self.vkd.freeMemory(self.device,    buffer.mem, null);
+        self.vkd.freeMemory   (self.device, buffer.mem, null);
+    }
+
+    // TODO(lm): remove
+    pub fn free_buffer_h(self: *Self, handle: ResourceHandle) void {
+        self.free_buffer(self.get_buffer(handle));
     }
 
     fn get_buffer(self: *Self, handle: ResourceHandle) Buffer {
@@ -1083,6 +1013,9 @@ pub const VulkanBackend = struct {
             }};
             self.vkd.cmdSetScissor(command_buffer, 0, scissors.len, &scissors);
 
+            // TODO(lm):
+            const scope_internals = internals.get_scope(.global);
+
             for (render_data.mesh_slice()) |mesh| {
                 const offsets = [_]vk.DeviceSize{0};
                 const vertex_buffers = [_]vk.Buffer{self.get_buffer(mesh.vertex_buffer).buf};
@@ -1098,8 +1031,8 @@ pub const VulkanBackend = struct {
                     0,
                     1,
                     @ptrCast([*]const
-                    vk.DescriptorSet,
-                    &internals.descriptor_sets.?[self.current_frame]),
+                        vk.DescriptorSet,
+                        &scope_internals.descriptor_sets[self.current_frame]),
                     0,
                     undefined
                 );
@@ -1125,22 +1058,6 @@ pub const VulkanBackend = struct {
         }
     }
 
-    fn update_uniform_buffer(self: *Self, current_image: u32, uniform_buffer_handles: []ResourceHandle) !void {
-        const time: f32 = (@intToFloat(f32, (try std.time.Instant.now()).since(self.start_time)) / @intToFloat(f32, std.time.ns_per_s));
-
-        var ubo = UniformBufferObject{
-            .model = za.Mat4.identity().rotate(time * 90.0, za.Vec3.new(0.0, 0.0, 1.0)),
-            .view = za.lookAt(za.Vec3.new(2, 2, 2), za.Vec3.new(0, 0, 0), za.Vec3.new(0, 0, 1)),
-            .proj = za.perspective(45.0, @intToFloat(f32, self.swap_chain_extent.width) / @intToFloat(f32, self.swap_chain_extent.height), 0.1, 10),
-        };
-        ubo.proj.data[1][1] *= -1;
-
-        const buffer = self.get_buffer(uniform_buffer_handles[current_image]);
-        const data = try self.vkd.mapMemory(self.device, buffer.mem, 0, @sizeOf(UniformBufferObject), .{});
-        std.mem.copy(u8, @ptrCast([*]u8, data.?)[0..@sizeOf(UniformBufferObject)], std.mem.asBytes(&ubo));
-        self.vkd.unmapMemory(self.device, buffer.mem);
-    }
-
     pub fn draw_frame(self: *Self, render_data: *const RenderData, internals_h: ResourceHandle) !void {
         _ = try self.vkd.waitForFences(self.device, 1, @ptrCast([*]const vk.Fence, &self.in_flight_fences.?[self.current_frame]), vk.TRUE, std.math.maxInt(u64));
 
@@ -1157,7 +1074,8 @@ pub const VulkanBackend = struct {
         }
 
         const internals = self.get_shader_internals(internals_h);
-        try self.update_uniform_buffer(self.current_frame, internals.uniform_buffers.?);
+        // try self.update_uniform_buffer(self.current_frame, internals.uniform_buffers.?);
+        try self.update_shader_uniform_buffer(self.current_frame, internals);
 
         try self.vkd.resetFences(self.device, 1, @ptrCast([*]const vk.Fence, &self.in_flight_fences.?[self.current_frame]));
 
@@ -1394,7 +1312,7 @@ pub const VulkanBackend = struct {
 
     // ------------------------------------------
 
-    fn create_graphics_pipeline(self: *Self, render_pass: vk.RenderPass, descriptor_set_layout: vk.DescriptorSetLayout, attribute_descriptions: []const vk.VertexInputAttributeDescription) !GraphicsPipeline {
+    fn create_graphics_pipeline(self: *Self, render_pass: vk.RenderPass, descriptor_set_layouts: []const vk.DescriptorSetLayout, attribute_descriptions: []const vk.VertexInputAttributeDescription) !GraphicsPipeline {
         Logger.debug("create graphics-pipeline\n", .{});
 
         const vert_shader_module: vk.ShaderModule = try self.create_shader_module(&resources.vert_27);
@@ -1510,8 +1428,9 @@ pub const VulkanBackend = struct {
 
         const pipeline_layout = try self.vkd.createPipelineLayout(self.device, &.{
             .flags = .{},
-            .set_layout_count = 1,
-            .p_set_layouts = @ptrCast([*]const vk.DescriptorSetLayout, &descriptor_set_layout),
+            .set_layout_count = @intCast(u32,descriptor_set_layouts.len),
+            // .p_set_layouts = @ptrCast([*]const vk.DescriptorSetLayout, &descriptor_set_layout),
+            .p_set_layouts = @ptrCast([*]const vk.DescriptorSetLayout, descriptor_set_layouts),
             .push_constant_range_count = 0,
             .p_push_constant_ranges = undefined,
         }, null);
@@ -1548,7 +1467,6 @@ pub const VulkanBackend = struct {
 
         return GraphicsPipeline {
             .render_pass = render_pass,
-            .descriptor_set_layout = descriptor_set_layout,
             .pipeline = pipeline,
             .pipeline_layout = pipeline_layout,
         };
@@ -1560,21 +1478,24 @@ pub const VulkanBackend = struct {
         self.vkd.destroyPipeline(self.device, pipeline.pipeline, null);
         self.vkd.destroyPipelineLayout(self.device, pipeline.pipeline_layout, null);
         self.vkd.destroyRenderPass(self.device, pipeline.render_pass, null);
-        self.vkd.destroyDescriptorSetLayout(self.device, pipeline.descriptor_set_layout, null);
+        // self.vkd.destroyDescriptorSetLayout(self.device, pipeline.descriptor_set_layout, null);
     }
 
     // ------------------------------------------
 
-    pub fn create_shader_internals(self: *Self, config: *const ShaderConfig, texture_h: ResourceHandle) !ResourceHandle {
+    pub fn create_shader_internals(self: *Self, info: *const ShaderInfo, texture_h: ResourceHandle) !ResourceHandle {
+        _ = texture_h;
         Logger.debug("creating shader-program\n", .{});
 
         var internals = ShaderInternals {};
+        // TODO(lm):
+        // errdefer self.destroy_shader_internals(&internals);
 
         // create attributes
         {
             var attr_stride: usize = 0;
 
-            for (config.attributes.as_slice()) |attr| {
+            for (info.attributes.as_slice()) |attr| {
                 internals.attributes.push(.{
                     .binding  = @intCast(u32, attr.binding),
                     .location = @intCast(u32, attr.location),
@@ -1586,35 +1507,323 @@ pub const VulkanBackend = struct {
             }
         }
 
-        internals.descriptor_set_layout = try self.create_descriptor_set_layout();
-        internals.pipeline              = try self.create_graphics_pipeline(self.render_pass, internals.descriptor_set_layout, internals.attributes.as_slice());
-        internals.uniform_buffers       = try self.create_uniform_buffers();
-        internals.descriptor_pool       = try self.create_descriptor_pool();
-        internals.descriptor_sets       = try self.create_descriptor_sets(texture_h, &internals.pipeline, internals.descriptor_pool, internals.uniform_buffers.?);
+        // create uniform-buffer
+        // TODO (lm): consider alignment requirements
+        {
+            var total_buffer_range: usize  = 0;
+            for (0..3) |scope_idx| {
+                const scope_info    = info.scopes[scope_idx];
+                var scope_internals = internals.scopes[scope_idx];
+                scope_internals.buffer_offset = total_buffer_range;
+
+                for (scope_info.buffers.items) |buff| {
+                    scope_internals.buffer_range += buff.size;
+                }
+
+                total_buffer_range += scope_internals.buffer_range;
+            }
+
+            const buffer_h                  = try self.create_uniform_buffer(total_buffer_range);
+            internals.uniform_buffer        = self.get_buffer(buffer_h);
+            internals.mapped_uniform_buffer = @ptrCast([*]u8,
+                try self.vkd.mapMemory(self.device, internals.uniform_buffer.mem, 0, total_buffer_range, .{}),
+            )[0..total_buffer_range];
+        }
+
+        // create descriptor-sets
+        {
+            const ubo_binding_idx = 0;
+            const sampler_binding_idx = 1;
+
+            internals.descriptor_pool = try self.create_descriptor_pool();
+
+            for (info.scopes, 0..) |scope, idx| {
+                // create layout
+                // -------------
+                var bindings = DescriptorSetLayoutBindingStack{};
+                var scope_internals = internals.scopes[idx];
+
+                if (idx != @enumToInt(render.shader.ShaderScope.local)) {
+                    // use uniform-buffers for non-local scopes
+                    bindings.push(.{
+                        .binding = ubo_binding_idx,
+                        .descriptor_count = 1,
+                        .descriptor_type = .uniform_buffer,
+                        .p_immutable_samplers = null,
+                        .stage_flags = .{ .vertex_bit = true, .fragment_bit = true },
+                    });
+                }
+                else {
+                    // use storage-buffers for local scope
+                    bindings.push(.{
+                        .binding = ubo_binding_idx,
+                        .descriptor_count = 1,
+                        .descriptor_type = .storage_buffer,
+                        .p_immutable_samplers = null,
+                        .stage_flags = .{ .vertex_bit = true, .fragment_bit = true },
+                    });
+                }
+
+                if (!scope.samplers.is_empty()) {
+                    bindings.push(.{
+                        .binding = sampler_binding_idx,
+                        .descriptor_count = @intCast(u32, scope.samplers.len),
+                        .descriptor_type = .combined_image_sampler,
+                        .p_immutable_samplers = null,
+                        .stage_flags = .{ .fragment_bit = true },
+                    });
+                }
+
+                const layout_info = vk.DescriptorSetLayoutCreateInfo{
+                    .flags = .{},
+                    .binding_count = @intCast(u32, bindings.len),
+                    .p_bindings = &bindings.items,
+                };
+
+                scope_internals.descriptor_set_layout = try self.vkd.createDescriptorSetLayout(self.device, &layout_info, null);
+
+                // allocate one descriptor-set per frame
+                // -------------------------------------
+                const layouts = [CFG.MAX_FRAMES_IN_FLIGHT]vk.DescriptorSetLayout {
+                    scope_internals.descriptor_set_layout,
+                    scope_internals.descriptor_set_layout,
+                };
+
+                const alloc_info = vk.DescriptorSetAllocateInfo {
+                    .descriptor_pool = internals.descriptor_pool,
+                    .descriptor_set_count = CFG.MAX_FRAMES_IN_FLIGHT,
+                    .p_set_layouts = &layouts,
+                };
+
+                try self.vkd.allocateDescriptorSets(self.device, &alloc_info, &scope_internals.descriptor_sets);
+            }
+        }
+
+        // TODO(lm): not sure if i like this ...
+        var all_layouts: [4]vk.DescriptorSetLayout = undefined;
+        inline for (0..4) |idx| {
+            all_layouts[idx] = internals.scopes[idx].descriptor_set_layout;
+        }
+
+        // TODO: continue
+        internals.pipeline = try self.create_graphics_pipeline(self.render_pass, all_layouts[0..], internals.attributes.as_slice());
 
         const slot = self.internals.add(internals);
         return ResourceHandle { .value = slot };
     }
 
-    pub fn destroy_shader_internals(self: *Self, internals_h: ResourceHandle) void {
-        Logger.debug("destroying shader-internals'{}'\n", .{ internals_h });
-        var internals = self.get_shader_internals(internals_h);
+    pub fn destroy_shader_internals(self: *Self, internals: *ShaderInternals) void {
+        Logger.debug("destroying shader-internals\n", .{});
 
-        if (internals.uniform_buffers != null) {
-            for (internals.uniform_buffers.?) |uniform_buffer| {
-                self.free_buffer(uniform_buffer);
+        // for (internals.scopes) |scope| {
+        //     for (scope.uniform_buffers) |uniform_buffer| {
+        //         self.free_buffer_h(uniform_buffer);
+        //     }
+        //     self.allocator.free(internals.uniform_buffers.?);
+        // }
+
+        for (internals.scopes) |scope| {
+            if (scope.descriptor_set_layout != .null_handle) {
+                self.vkd.destroyDescriptorSetLayout(self.device, scope.descriptor_set_layout, null);
             }
-            self.allocator.free(internals.uniform_buffers.?);
         }
 
         if (internals.descriptor_pool != .null_handle) self.vkd.destroyDescriptorPool(self.device, internals.descriptor_pool, null);
-        if (internals.descriptor_sets != null) self.allocator.free(internals.descriptor_sets.?);
+        // if (internals.descriptor_sets != null) self.allocator.free(internals.descriptor_sets.?);
+
+        self.vkd.unmapMemory(self.device, internals.uniform_buffer.mem);
+        self.free_buffer(internals.uniform_buffer);
 
         self.destroy_graphics_pipeline(&internals.pipeline);
     }
 
+    pub fn destroy_shader_internals_h(self: *Self, internals_h: ResourceHandle) void {
+        self.destroy_shader_internals(self.get_shader_internals(internals_h));
+    }
+
     pub fn get_shader_internals(self: *Self, internals_h: ResourceHandle) *ShaderInternals {
         return self.internals.get_mut(internals_h.value);
+    }
+
+    // fn update_uniform_buffer(self: *Self, current_image: u32, uniform_buffer_handles: []ResourceHandle) !void {
+    //     const time: f32 = (@intToFloat(f32, (try std.time.Instant.now()).since(self.start_time)) / @intToFloat(f32, std.time.ns_per_s));
+    //
+    //     var ubo = UniformBufferObject{
+    //         .model = za.Mat4.identity().rotate(time * 90.0, za.Vec3.new(0.0, 0.0, 1.0)),
+    //         .view = za.lookAt(za.Vec3.new(2, 2, 2), za.Vec3.new(0, 0, 0), za.Vec3.new(0, 0, 1)),
+    //         .proj = za.perspective(45.0, @intToFloat(f32, self.swap_chain_extent.width) / @intToFloat(f32, self.swap_chain_extent.height), 0.1, 10),
+    //     };
+    //     ubo.proj.data[1][1] *= -1;
+    //
+    //     const buffer = self.get_buffer(uniform_buffer_handles[current_image]);
+    //     const data = try self.vkd.mapMemory(self.device, buffer.mem, 0, @sizeOf(UniformBufferObject), .{});
+    //     std.mem.copy(u8, @ptrCast([*]u8, data.?)[0..@sizeOf(UniformBufferObject)], std.mem.asBytes(&ubo));
+    //     self.vkd.unmapMemory(self.device, buffer.mem);
+    // }
+
+    fn update_shader_uniform_buffer(self: *Self, current_image: u32, internals: *ShaderInternals) !void {
+        _ = current_image;
+        const time: f32 = (@intToFloat(f32, (try std.time.Instant.now()).since(self.start_time)) / @intToFloat(f32, std.time.ns_per_s));
+
+        var ubo = UniformBufferObject{
+            .model = za.Mat4.identity().rotate(time * 90.0, za.Vec3.new(0.0, 0.0, 1.0)),
+            .view = za.lookAt(za.Vec3.new(2, 2, 2), za.Vec3.new(0, 0, 0), za.Vec3.new(0, 0, 1)),
+            .proj = za.perspective(45.0, @intToFloat(f32, self.swap_chain_extent.width) / @intToFloat(f32, self.swap_chain_extent.height), 0.1, 10),
+        };
+        ubo.proj.data[1][1] *= -1;
+
+
+        std.mem.copy(u8,
+            // @ptrCast([*]u8, data.?)[0..@sizeOf(UniformBufferObject)],
+            internals.mapped_uniform_buffer[0..@sizeOf(UniformBufferObject)],
+            std.mem.asBytes(&ubo)
+        );
+    }
+
+    // fn create_descriptor_set_layout(self: *Self, info: *ShaderInfo) !vk.DescriptorSetLayout {
+    //     const bindings = [_]vk.DescriptorSetLayoutBinding{
+    //         .{
+    //             .binding = 0,
+    //             .descriptor_count = 1,
+    //             .descriptor_type = .uniform_buffer,
+    //             .p_immutable_samplers = null,
+    //             .stage_flags = .{ .vertex_bit = true },
+    //         },
+    //         .{
+    //             .binding = 1,
+    //             .descriptor_count = 1,
+    //             .descriptor_type = .combined_image_sampler,
+    //             .p_immutable_samplers = null,
+    //             .stage_flags = .{ .fragment_bit = true },
+    //         },
+    //     };
+    //
+    //     const layout_info = vk.DescriptorSetLayoutCreateInfo{
+    //         .flags = .{},
+    //         .binding_count = bindings.len,
+    //         .p_bindings = &bindings,
+    //     };
+    //
+    //     return try self.vkd.createDescriptorSetLayout(self.device, &layout_info, null);
+    // }
+
+    // fn create_descriptor_sets(self: *Self, texture_image: ResourceHandle, pipeline: *const GraphicsPipeline, descriptor_pool: vk.DescriptorPool, uniform_buffer_handles: []ResourceHandle) ![]vk.DescriptorSet{
+    //     const layouts = [_]vk.DescriptorSetLayout{
+    //         pipeline.descriptor_set_layout,
+    //         pipeline.descriptor_set_layout
+    //     };
+    //     const alloc_info = vk.DescriptorSetAllocateInfo{
+    //         .descriptor_pool = descriptor_pool,
+    //         .descriptor_set_count = CFG.MAX_FRAMES_IN_FLIGHT,
+    //         .p_set_layouts = &layouts,
+    //     };
+    //     var descriptor_sets = try self.allocator.alloc(vk.DescriptorSet, CFG.MAX_FRAMES_IN_FLIGHT);
+    //
+    //     try self.vkd.allocateDescriptorSets(self.device, &alloc_info, descriptor_sets.ptr);
+    //
+    //     for (descriptor_sets, 0..) |descriptor_set, i| {
+    //         const buffer = self.get_buffer(uniform_buffer_handles[i]);
+    //         const buffer_info = [_]vk.DescriptorBufferInfo{.{
+    //             .buffer = buffer.buf,
+    //             .offset = 0,
+    //             .range = @sizeOf(UniformBufferObject),
+    //         }};
+    //
+    //         const texture_image_data = self.get_image(texture_image);
+    //         const image_info = [_]vk.DescriptorImageInfo{.{
+    //             .image_layout = .shader_read_only_optimal,
+    //             .image_view = texture_image_data.view,
+    //             .sampler = texture_image_data.sampler.?, // TODO (lm): don't unwrap
+    //         }};
+    //
+    //         const descriptor_writes = [_]vk.WriteDescriptorSet{
+    //             .{
+    //                 .dst_set = descriptor_set,
+    //                 .dst_binding = 0,
+    //                 .dst_array_element = 0,
+    //                 .descriptor_type = .uniform_buffer,
+    //                 .descriptor_count = 1,
+    //                 .p_buffer_info = &buffer_info,
+    //                 .p_image_info = undefined,
+    //                 .p_texel_buffer_view = undefined,
+    //             },
+    //             .{
+    //                 .dst_set = descriptor_set,
+    //                 .dst_binding = 1,
+    //                 .dst_array_element = 0,
+    //                 .descriptor_type = .combined_image_sampler,
+    //                 .descriptor_count = 1,
+    //                 .p_buffer_info = undefined,
+    //                 .p_image_info = &image_info,
+    //                 .p_texel_buffer_view = undefined,
+    //             },
+    //         };
+    //
+    //         self.vkd.updateDescriptorSets(self.device, descriptor_writes.len, &descriptor_writes, 0, undefined);
+    //     }
+    //
+    //     return descriptor_sets;
+    // }
+
+    fn apply_normal_scope(
+        self: *Self,
+        info: ShaderInfo,
+        scope: ShaderScope,
+        internals: *ShaderInternals,
+        texture_image: ResourceHandle,
+        pipeline: *const GraphicsPipeline,
+        descriptor_pool: vk.DescriptorPool
+    ) !void
+    {
+        _ = descriptor_pool;
+        _ = pipeline;
+        const scope_internals = internals.scope[@enumToInt(scope)];
+        const scope_info      = info.scopes[@enumToInt(scope)];
+        const descriptor_set = scope_internals.descriptor_sets[self.current_frame];
+
+        // const buffer = self.get_buffer(uniform_buffer_handles[i]);
+        const buffer_info = [_]vk.DescriptorBufferInfo{.{
+            .buffer = internals.uniform_buffer.buf,
+            .offset = scope_internals.buffer_offset,
+            .range  = scope_internals.buffer_range,
+        }};
+
+        // TODO (lm):
+        const texture_image_data = self.get_image(texture_image);
+        var image_info = DescriptorImageInfoStack {};
+
+        for (scope_info.samplers.items) |_| {
+            image_info.push(.{
+                .image_layout = .shader_read_only_optimal,
+                .image_view = texture_image_data.view,
+                .sampler = texture_image_data.sampler.?, // TODO (lm): don't unwrap
+            });
+        }
+
+        const descriptor_writes = [_]vk.WriteDescriptorSet{
+            .{
+                .dst_set = descriptor_set,
+                .dst_binding = 0,
+                .dst_array_element = 0,
+                .descriptor_type = .uniform_buffer,
+                .descriptor_count = 1,
+                .p_buffer_info = &buffer_info,
+                .p_image_info = undefined,
+                .p_texel_buffer_view = undefined,
+            },
+            .{
+                .dst_set = descriptor_set,
+                .dst_binding = 1,
+                .dst_array_element = 0,
+                .descriptor_type = .combined_image_sampler,
+                .descriptor_count = 1,
+                .p_buffer_info = undefined,
+                .p_image_info = &image_info,
+                .p_texel_buffer_view = undefined,
+            },
+        };
+
+        self.vkd.updateDescriptorSets(self.device, descriptor_writes.len, &descriptor_writes, 0, undefined);
     }
 
     // ------------------------------------------

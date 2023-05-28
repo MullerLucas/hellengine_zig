@@ -1,8 +1,10 @@
 const std    = @import("std");
 const vk     = @import("vulkan");
-const config = @import("../../config.zig");
+const CFG = @import("../../config.zig");
 const core   = @import("../../core/core.zig");
 const ResourceHandle = core.ResourceHandle;
+const render = @import("../render.zig");
+const ShaderScope = render.shader.ShaderScope;
 
 // ----------------------------------------------
 
@@ -14,9 +16,9 @@ pub const BaseDispatch = vk.BaseWrapper(.{
 // ----------------------------------------------
 
 pub const InstanceDispatch = vk.InstanceWrapper(.{
-    .createDebugUtilsMessengerEXT = config.enable_validation_layers,
+    .createDebugUtilsMessengerEXT = CFG.enable_validation_layers,
     .createDevice = true,
-    .destroyDebugUtilsMessengerEXT = config.enable_validation_layers,
+    .destroyDebugUtilsMessengerEXT = CFG.enable_validation_layers,
     .destroyInstance = true,
     .destroySurfaceKHR = true,
     .enumerateDeviceExtensionProperties = true,
@@ -140,23 +142,36 @@ pub const ImageArrayList = std.MultiArrayList(Image);
 
 pub const GraphicsPipeline = struct {
     render_pass: vk.RenderPass = .null_handle,
-    descriptor_set_layout: vk.DescriptorSetLayout = .null_handle,
     pipeline_layout: vk.PipelineLayout = .null_handle,
     pipeline: vk.Pipeline = .null_handle,
 };
 
 // ----------------------------------------------
 
-pub const ShaderAttributeArray = core.StackArray(vk.VertexInputAttributeDescription, config.shader_attribute_limit);
+pub const ShaderAttributeArray = core.StackArray(vk.VertexInputAttributeDescription, CFG.shader_attribute_limit);
 
 pub const ShaderInternals = struct {
-    descriptor_set_layout: vk.DescriptorSetLayout = .null_handle,
+    scopes: [4]ShaderScopeInternals = [_]ShaderScopeInternals { .{} } ** 4,
     pipeline: GraphicsPipeline = .{},
-    uniform_buffers: ?[]ResourceHandle = null,
+    // uniform_buffers: ?[]ResourceHandle = null,
     descriptor_pool: vk.DescriptorPool = .null_handle,
-    descriptor_sets: ?[]vk.DescriptorSet = null,
+    // descriptor_sets: ?[]vk.DescriptorSet = null,
 
     attributes: ShaderAttributeArray = .{},
+
+    uniform_buffer:         Buffer = undefined,
+    mapped_uniform_buffer:  []u8   = undefined,
+
+    pub fn get_scope(self: *const ShaderInternals, scope: ShaderScope) *const ShaderScopeInternals {
+        return &self.scopes[@enumToInt(scope)];
+    }
 };
 
 // ----------------------------------------------
+
+pub const ShaderScopeInternals = struct {
+    buffer_offset: usize = 0,
+    buffer_range: usize = 0,
+    descriptor_set_layout: vk.DescriptorSetLayout = .null_handle,
+    descriptor_sets: [CFG.MAX_FRAMES_IN_FLIGHT]vk.DescriptorSet = [_]vk.DescriptorSet { .null_handle } ** CFG.MAX_FRAMES_IN_FLIGHT,
+};

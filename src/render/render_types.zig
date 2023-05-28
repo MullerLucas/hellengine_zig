@@ -33,28 +33,28 @@ pub const Vertex = struct {
         };
     }
 
-    pub fn get_attribute_descriptions() [3]vk.VertexInputAttributeDescription {
-        return [_]vk.VertexInputAttributeDescription{
-            .{
-                .binding = 0,
-                .location = 0,
-                .format = .r32g32b32_sfloat,
-                .offset = @offsetOf(Vertex, "pos"),
-            },
-            .{
-                .binding = 0,
-                .location = 1,
-                .format = .r32g32b32_sfloat,
-                .offset = @offsetOf(Vertex, "color"),
-            },
-            .{
-                .binding = 0,
-                .location = 2,
-                .format = .r32g32_sfloat,
-                .offset = @offsetOf(Vertex, "tex_coord"),
-            },
-        };
-    }
+    // pub fn get_attribute_descriptions() [3]vk.VertexInputAttributeDescription {
+    //     return [_]vk.VertexInputAttributeDescription{
+    //         .{
+    //             .binding = 0,
+    //             .location = 0,
+    //             .format = .r32g32b32_sfloat,
+    //             .offset = @offsetOf(Vertex, "pos"),
+    //         },
+    //         .{
+    //             .binding = 0,
+    //             .location = 1,
+    //             .format = .r32g32b32_sfloat,
+    //             .offset = @offsetOf(Vertex, "color"),
+    //         },
+    //         .{
+    //             .binding = 0,
+    //             .location = 2,
+    //             .format = .r32g32_sfloat,
+    //             .offset = @offsetOf(Vertex, "tex_coord"),
+    //         },
+    //     };
+    // }
 };
 
 // ----------------------------------------------

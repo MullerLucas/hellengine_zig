@@ -14,7 +14,7 @@ const Logger     = render.Logger;
 const RenderData = render.RenderData;
 
 const ShaderProgram = render.ShaderProgram;
-const ShaderConfig = render.ShaderConfig;
+const ShaderInfo = render.ShaderInfo;
 
 // ----------------------------------------------
 
@@ -55,19 +55,20 @@ pub const Renderer = struct {
 
     // ------------------------------------------
 
-    pub fn create_shader_program(self: *Renderer, config: ShaderConfig, texture_h: ResourceHandle) !ShaderProgram {
+    pub fn create_shader_program(self: *Renderer, info: ShaderInfo, texture_h: ResourceHandle) !ShaderProgram {
         Logger.debug("creating shader-program\n", .{});
-        const internals = try self.backend.create_shader_internals(&config, texture_h);
+        const internals = try self.backend.create_shader_internals(&info, texture_h);
 
         return ShaderProgram {
-            .config = config,
+            .info = info,
             .internals_h = internals,
         };
     }
 
     pub fn destroy_shader_program(self: *Renderer, program: *ShaderProgram) void {
         Logger.debug("destroy shader-program\n", .{});
-        self.backend.destroy_shader_internals(program.internals_h);
+        program.info.deinit();
+        self.backend.destroy_shader_internals_h(program.internals_h);
     }
 
     // ------------------------------------------

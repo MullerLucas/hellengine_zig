@@ -21,11 +21,15 @@ pub fn StackArray(comptime T: type, comptime capacity: usize) type {
             return self.items[self.len];
         }
 
-        pub fn is_full(self: *const Self) bool {
+        pub inline fn is_full(self: *const Self) bool {
             return self.len == (capacity - 1);
         }
 
-        pub fn as_slice(self: *const Self) []const T {
+        pub inline fn is_empty(self: *const Self) bool {
+            return self.len == 0;
+        }
+
+        pub inline fn as_slice(self: *const Self) []const T {
             return self.items[0..self.len];
         }
     };

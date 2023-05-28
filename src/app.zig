@@ -11,8 +11,9 @@ const core   = @import("./core/core.zig");
 const Logger = core.log.scoped(.app);
 const ResourceHandle = core.ResourceHandle;
 
-const ShaderConfig  = render.ShaderConfig;
+const ShaderConfig  = render.ShaderInfo;
 const ShaderProgram = render.ShaderProgram;
+const ShaderScope   = render.shader.ShaderScope;
 
 // ----------------------------------------------g
 
@@ -53,6 +54,8 @@ pub const TestScene = struct {
             shader_config.add_attribute(.r32g32b32_sfloat, 0, 1);
             shader_config.add_attribute(.r32g32_sfloat,    0, 2);
 
+            try shader_config.add_uniform(allocator, .global, "my_ubo", @sizeOf(render.UniformBufferObject));
+
             self.program = try self.renderer.create_shader_program(shader_config, self.meshes.items[0].texture);
         }
 
@@ -63,14 +66,15 @@ pub const TestScene = struct {
         Logger.info("deinitializing test-scene\n", .{});
 
         for (self.meshes.items) |mesh| {
-            self.renderer.backend.free_buffer(mesh.vertex_buffer);
-            self.renderer.backend.free_buffer(mesh.index_buffer);
+            self.renderer.backend.free_buffer_h(mesh.vertex_buffer);
+            self.renderer.backend.free_buffer_h(mesh.index_buffer);
             self.renderer.backend.free_image(mesh.texture);
         }
 
         self.meshes.deinit();
 
         self.renderer.destroy_shader_program(&self.program);
+        self.program.deinit();
         self.program = undefined;
     }
 

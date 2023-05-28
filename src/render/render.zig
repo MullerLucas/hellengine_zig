@@ -10,9 +10,9 @@ pub const RenderData          = render_types.RenderData;
 pub const NumberFormat        = render_types.NumberFormat;
 
 
-const shader            = @import("shader.zig");
+pub const shader        = @import("shader.zig");
 pub const ShaderProgram = shader.ShaderProgram;
-pub const ShaderConfig  = shader.ShaderConfig;
+pub const ShaderInfo  = shader.ShaderInfo;
 
 
 pub const Logger = @import("../core/log.zig").scoped(.render);
