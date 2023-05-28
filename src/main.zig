@@ -40,7 +40,7 @@ pub fn main() !void {
 
     while (!window.should_close()) {
         GlfwWindow.poll_events();
-        try renderer.draw_frame(&scene.render_data, scene.program);
+        try renderer.draw_frame(&scene.render_data, &scene.program);
     }
 
     try renderer.device_wait_idle();

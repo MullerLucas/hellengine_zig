@@ -7,7 +7,12 @@ pub const Vertex              = render_types.Vertex;
 pub const Mesh                = render_types.Mesh;
 pub const MeshList            = render_types.MeshList;
 pub const RenderData          = render_types.RenderData;
-pub const ShaderProgram       = render_types.ShaderProgram;
+pub const NumberFormat        = render_types.NumberFormat;
+
+
+const shader            = @import("shader.zig");
+pub const ShaderProgram = shader.ShaderProgram;
+pub const ShaderConfig  = shader.ShaderConfig;
 
 
 pub const Logger = @import("../core/log.zig").scoped(.render);

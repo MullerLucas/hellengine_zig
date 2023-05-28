@@ -12,5 +12,7 @@ pub const ImageArrayList     = vulkan_types.ImageArrayList;
 pub const GraphicsPipeline   = vulkan_types.GraphicsPipeline;
 pub const GraphicsPipelineArrayList = vulkan_types.GraphicsPipelineArrayList;
 
+pub const ShaderInternals = vulkan_types.ShaderInternals;
+
 pub const Logger = @import("../../core/log.zig").scoped(.vulkan);
 

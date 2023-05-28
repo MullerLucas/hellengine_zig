@@ -1,6 +1,8 @@
 const std    = @import("std");
 const vk     = @import("vulkan");
 const config = @import("../../config.zig");
+const core   = @import("../../core/core.zig");
+const ResourceHandle = core.ResourceHandle;
 
 // ----------------------------------------------
 
@@ -143,6 +145,18 @@ pub const GraphicsPipeline = struct {
     pipeline: vk.Pipeline = .null_handle,
 };
 
-pub const GraphicsPipelineArrayList = std.ArrayList(GraphicsPipeline);
+// ----------------------------------------------
+
+pub const ShaderAttributeArray = core.StackArray(vk.VertexInputAttributeDescription, config.shader_attribute_limit);
+
+pub const ShaderInternals = struct {
+    descriptor_set_layout: vk.DescriptorSetLayout = .null_handle,
+    pipeline: GraphicsPipeline = .{},
+    uniform_buffers: ?[]ResourceHandle = null,
+    descriptor_pool: vk.DescriptorPool = .null_handle,
+    descriptor_sets: ?[]vk.DescriptorSet = null,
+
+    attributes: ShaderAttributeArray = .{},
+};
 
 // ----------------------------------------------

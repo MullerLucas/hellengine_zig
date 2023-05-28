@@ -11,13 +11,16 @@ const core   = @import("./core/core.zig");
 const Logger = core.log.scoped(.app);
 const ResourceHandle = core.ResourceHandle;
 
+const ShaderConfig  = render.ShaderConfig;
+const ShaderProgram = render.ShaderProgram;
+
 // ----------------------------------------------g
 
 pub const TestScene = struct {
     renderer: *Renderer,
     meshes: MeshList,
     render_data: RenderData,
-    program: ResourceHandle = ResourceHandle.invalid,
+    program: ShaderProgram = undefined,
 
     pub fn init(allocator: std.mem.Allocator, renderer: *Renderer) !TestScene {
         Logger.info("initializing test-scene\n", .{});
@@ -28,17 +31,27 @@ pub const TestScene = struct {
             .render_data = RenderData {},
         };
 
-        try self.meshes.append(try self.createQuadMesh1());
-        try self.meshes.append(try self.createQuadMesh2());
-        try self.meshes.append(try self.createQuadMesh3());
+        // create render-data
+        {
+            try self.meshes.append(try self.createQuadMesh1());
+            try self.meshes.append(try self.createQuadMesh2());
+            try self.meshes.append(try self.createQuadMesh3());
 
-        self.render_data = RenderData {};
-        self.render_data.add_mesh(&self.meshes.items[0]);
-        self.render_data.add_mesh(&self.meshes.items[1]);
-        self.render_data.add_mesh(&self.meshes.items[2]);
+            self.render_data = RenderData {};
+            self.render_data.add_mesh(&self.meshes.items[0]);
+            self.render_data.add_mesh(&self.meshes.items[1]);
+            self.render_data.add_mesh(&self.meshes.items[2]);
+        }
 
+        // create shader-program
+        {
+            var shader_config = ShaderConfig { };
+            shader_config.add_attribute(.r32g32b32_sfloat, 0, 0);
+            shader_config.add_attribute(.r32g32b32_sfloat, 0, 1);
+            shader_config.add_attribute(.r32g32_sfloat,    0, 2);
 
-        self.program = try self.renderer.backend.create_shader_program(self.meshes.items[0].texture);
+            self.program = try self.renderer.create_shader_program(shader_config, self.meshes.items[0].texture);
+        }
 
         return self;
     }
@@ -54,7 +67,8 @@ pub const TestScene = struct {
 
         self.meshes.deinit();
 
-        self.renderer.backend.destroy_shader_program(self.program);
+        self.renderer.destroy_shader_program(&self.program);
+        self.program = undefined;
     }
 
     pub fn createQuadMesh1(self: *TestScene) !Mesh {

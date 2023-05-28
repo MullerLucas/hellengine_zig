@@ -71,43 +71,6 @@ pub const MeshList = std.ArrayList(Mesh);
 
 // ----------------------------------------------
 
-pub const ShaderAttribute = struct {
-    format: NumberFormat,
-    binding: usize,
-    layout: usize,
-};
-
-pub const ShaderAttributeArray = core.StackArray(vk.VertexInputAttributeDescription, config.shader_attribute_limit);
-// pub const ShaderAttributeArray = core.StackArray(ShaderAttribute, config.shader_attribute_limit);
-
-// ----------------------------------------------
-
-pub const ShaderProgram = struct {
-    descriptor_set_layout: vk.DescriptorSetLayout = .null_handle,
-    pipeline: ResourceHandle = ResourceHandle.invalid,
-    uniform_buffers: ?[]ResourceHandle = null,
-    descriptor_pool: vk.DescriptorPool   = .null_handle,
-    descriptor_sets: ?[]vk.DescriptorSet = null,
-
-    attributes: ShaderAttributeArray = .{},
-    attribute_stride: usize = 0,
-
-    pub fn add_attribute(self: *ShaderProgram, format: NumberFormat, binding: usize, location: usize) void {
-        Logger.info("add attribute with format '{}', binding '{}' and location '{}'\n", .{format, binding, location});
-
-        self.attributes.push(.{
-            .binding  = @intCast(u32, binding),
-            .location = @intCast(u32, location),
-            .format   = format.to_vk_format(),
-            .offset   = @intCast(u32, self.attribute_stride),
-        });
-
-        self.attribute_stride += format.size();
-    }
-};
-
-// ----------------------------------------------
-
 pub const RenderData = struct {
     pub const DATA_LIMIT: usize = 1024;
     len: usize = 0,

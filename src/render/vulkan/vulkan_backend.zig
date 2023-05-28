@@ -7,7 +7,7 @@ const za               = @import("zalgebra");
 
 const GlfwWindow       = @import("../../GlfwWindow.zig");
 
-const config    = @import("../../config.zig");
+const CFG       = @import("../../config.zig");
 const resources = @import("resources");
 
 const core           = @import("../../core/core.zig");
@@ -18,7 +18,8 @@ const render              = @import("../render.zig");
 const Vertex              = render.Vertex;
 const RenderData          = render.RenderData;
 const UniformBufferObject = render.UniformBufferObject;
-const ShaderProgram       = render.ShaderProgram;
+// const ShaderProgram       = render.ShaderProgram;
+const ShaderConfig        = render.ShaderConfig;
 
 const vulkan     = @import("./vulkan.zig");
 const Logger     = vulkan.Logger;
@@ -28,6 +29,8 @@ const Image      = vulkan.Image;
 const ImageArrayList     = vulkan.ImageArrayList;
 const QueueFamilyIndices = vulkan.QueueFamilyIndices;
 const GraphicsPipeline   = vulkan.GraphicsPipeline;
+
+const ShaderInternals = vulkan.ShaderInternals;
 
 
 const c = @cImport({
@@ -59,7 +62,7 @@ pub const SwapChainSupportDetails = struct {
 
 // ----------------------------------------------
 
-const ShaderProgramArray = SlotArray(ShaderProgram, 64);
+const ShaderInternalsArray = SlotArray(ShaderInternals, 64);
 
 // ----------------------------------------------
 
@@ -94,15 +97,10 @@ pub const VulkanBackend = struct {
     command_pool: vk.CommandPool = .null_handle,
 
     buffers: BufferList = BufferList{},
-    // uniform_buffer_handles: ?[]ResourceHandle = null,
     images: ImageArrayList = ImageArrayList{},
     depth_image_handle: ResourceHandle = ResourceHandle.invalid,
-    pipelines: vulkan.GraphicsPipelineArrayList,
-    // pipeline_handle: ResourceHandle = ResourceHandle.invalid,
 
-    // descriptor_pool: vk.DescriptorPool   = .null_handle,
-    // descriptor_sets: ?[]vk.DescriptorSet = null,
-    programs: ShaderProgramArray = .{},
+    internals: ShaderInternalsArray = .{},
 
     command_buffers: ?[]vk.CommandBuffer = null,
 
@@ -121,7 +119,6 @@ pub const VulkanBackend = struct {
             .allocator = allocator,
             .start_time = try std.time.Instant.now(),
             .window = window,
-            .pipelines = vulkan.GraphicsPipelineArrayList.init(allocator),
         };
 
         try self.createInstance();
@@ -184,7 +181,7 @@ pub const VulkanBackend = struct {
         self.cleanup_swap_chain();
 
         // try self.destroy_graphics_pipeline(self.pipeline_handle);
-        self.pipelines.deinit();
+        // self.pipelines.deinit();
 
         // if (self.uniform_buffer_handles != null) {
         //     for (self.uniform_buffer_handles.?) |uniform_buffer_handle| {
@@ -226,7 +223,7 @@ pub const VulkanBackend = struct {
 
         if (self.device != .null_handle) self.vkd.destroyDevice(self.device, null);
 
-        if (config.enable_validation_layers and self.debug_messenger != .null_handle) self.vki.destroyDebugUtilsMessengerEXT(self.instance, self.debug_messenger, null);
+        if (CFG.enable_validation_layers and self.debug_messenger != .null_handle) self.vki.destroyDebugUtilsMessengerEXT(self.instance, self.debug_messenger, null);
 
         if (self.surface != .null_handle) self.vki.destroySurfaceKHR(self.instance, self.surface, null);
         if (self.instance != .null_handle) self.vki.destroyInstance(self.instance, null);
@@ -254,7 +251,7 @@ pub const VulkanBackend = struct {
         const vk_proc = @ptrCast(*const fn (instance: vk.Instance, procname: [*:0]const u8) callconv(.C) vk.PfnVoidFunction, &GlfwWindow.get_instance_proc_address);
         self.vkb = try vulkan.BaseDispatch.load(vk_proc);
 
-        if (config.enable_validation_layers and !try self.check_validation_layer_support()) {
+        if (CFG.enable_validation_layers and !try self.check_validation_layer_support()) {
             return error.MissingValidationLayer;
         }
 
@@ -278,7 +275,7 @@ pub const VulkanBackend = struct {
             .pp_enabled_extension_names = extensions.items.ptr,
         };
 
-        if (config.enable_validation_layers) {
+        if (CFG.enable_validation_layers) {
             create_info.enabled_layer_count = validation_layers.len;
             create_info.pp_enabled_layer_names = &validation_layers;
 
@@ -311,7 +308,7 @@ pub const VulkanBackend = struct {
     }
 
     fn setup_debug_messenger(self: *Self) !void {
-        if (!config.enable_validation_layers) return;
+        if (!CFG.enable_validation_layers) return;
 
         var create_info: vk.DebugUtilsMessengerCreateInfoEXT = undefined;
         populate_debug_messenger_create_info(&create_info);
@@ -383,7 +380,7 @@ pub const VulkanBackend = struct {
             .p_enabled_features = &device_features,
         };
 
-        if (config.enable_validation_layers) {
+        if (CFG.enable_validation_layers) {
             create_info.enabled_layer_count = validation_layers.len;
             create_info.pp_enabled_layer_names = &validation_layers;
         }
@@ -859,10 +856,10 @@ pub const VulkanBackend = struct {
     fn create_uniform_buffers(self: *Self) ![]ResourceHandle {
         const buffer_size: vk.DeviceSize = @sizeOf(UniformBufferObject);
 
-        var uniform_buffer_handles = try self.allocator.alloc(ResourceHandle, config.MAX_FRAMES_IN_FLIGHT);
+        var uniform_buffer_handles = try self.allocator.alloc(ResourceHandle, CFG.MAX_FRAMES_IN_FLIGHT);
 
         var i: usize = 0;
-        while (i < config.MAX_FRAMES_IN_FLIGHT) : (i += 1) {
+        while (i < CFG.MAX_FRAMES_IN_FLIGHT) : (i += 1) {
             uniform_buffer_handles[i] = try self.create_buffer(buffer_size, .{ .uniform_buffer_bit = true }, .{ .host_visible_bit = true, .host_coherent_bit = true });
         }
 
@@ -873,11 +870,11 @@ pub const VulkanBackend = struct {
         const pool_sizes = [_]vk.DescriptorPoolSize{
             .{
                 .type = .uniform_buffer,
-                .descriptor_count = config.MAX_FRAMES_IN_FLIGHT,
+                .descriptor_count = CFG.MAX_FRAMES_IN_FLIGHT,
             },
             .{
                 .type = .combined_image_sampler,
-                .descriptor_count = config.MAX_FRAMES_IN_FLIGHT,
+                .descriptor_count = CFG.MAX_FRAMES_IN_FLIGHT,
             },
         };
 
@@ -885,21 +882,20 @@ pub const VulkanBackend = struct {
             .flags = .{},
             .pool_size_count = pool_sizes.len,
             .p_pool_sizes = &pool_sizes,
-            .max_sets = config.MAX_FRAMES_IN_FLIGHT,
+            .max_sets = CFG.MAX_FRAMES_IN_FLIGHT,
         };
 
         return try self.vkd.createDescriptorPool(self.device, &pool_info, null);
     }
 
-    fn create_descriptor_sets(self: *Self, texture_image: ResourceHandle, pipeline: ResourceHandle, descriptor_pool: vk.DescriptorPool, uniform_buffer_handles: []ResourceHandle) ![]vk.DescriptorSet{
-        const pipeline_data = self.get_graphics_pipeline(pipeline);
-        const layouts = [_]vk.DescriptorSetLayout{ pipeline_data.descriptor_set_layout, pipeline_data.descriptor_set_layout };
+    fn create_descriptor_sets(self: *Self, texture_image: ResourceHandle, pipeline: *const GraphicsPipeline, descriptor_pool: vk.DescriptorPool, uniform_buffer_handles: []ResourceHandle) ![]vk.DescriptorSet{
+        const layouts = [_]vk.DescriptorSetLayout{ pipeline.descriptor_set_layout, pipeline.descriptor_set_layout };
         const alloc_info = vk.DescriptorSetAllocateInfo{
             .descriptor_pool = descriptor_pool,
-            .descriptor_set_count = config.MAX_FRAMES_IN_FLIGHT,
+            .descriptor_set_count = CFG.MAX_FRAMES_IN_FLIGHT,
             .p_set_layouts = &layouts,
         };
-        var descriptor_sets = try self.allocator.alloc(vk.DescriptorSet, config.MAX_FRAMES_IN_FLIGHT);
+        var descriptor_sets = try self.allocator.alloc(vk.DescriptorSet, CFG.MAX_FRAMES_IN_FLIGHT);
 
         try self.vkd.allocateDescriptorSets(self.device, &alloc_info, descriptor_sets.ptr);
 
@@ -1050,7 +1046,7 @@ pub const VulkanBackend = struct {
     }
 
     fn create_command_buffers(self: *Self) !void {
-        self.command_buffers = try self.allocator.alloc(vk.CommandBuffer, config.MAX_FRAMES_IN_FLIGHT);
+        self.command_buffers = try self.allocator.alloc(vk.CommandBuffer, CFG.MAX_FRAMES_IN_FLIGHT);
 
         try self.vkd.allocateCommandBuffers(self.device, &.{
             .command_pool = self.command_pool,
@@ -1059,7 +1055,7 @@ pub const VulkanBackend = struct {
         }, self.command_buffers.?.ptr);
     }
 
-    fn record_command_buffer(self: *Self, command_buffer: vk.CommandBuffer, image_index: u32, render_data: *const RenderData, program_data: *const ShaderProgram) !void {
+    fn record_command_buffer(self: *Self, command_buffer: vk.CommandBuffer, image_index: u32, render_data: *const RenderData, internals: *const ShaderInternals) !void {
         try self.vkd.beginCommandBuffer(command_buffer, &.{
             .flags = .{},
             .p_inheritance_info = null,
@@ -1070,9 +1066,8 @@ pub const VulkanBackend = struct {
             .{ .depth_stencil = .{ .depth = 1.0, .stencil = 0 } },
         };
 
-        const pipeline_data = self.get_graphics_pipeline(program_data.pipeline);
         const render_pass_info = vk.RenderPassBeginInfo{
-            .render_pass = pipeline_data.render_pass,
+            .render_pass = internals.pipeline.render_pass,
             .framebuffer = self.swap_chain_framebuffers.?[image_index],
             .render_area = vk.Rect2D{
                 .offset = .{ .x = 0, .y = 0 },
@@ -1084,7 +1079,7 @@ pub const VulkanBackend = struct {
 
         self.vkd.cmdBeginRenderPass(command_buffer, &render_pass_info, .@"inline");
         {
-            self.vkd.cmdBindPipeline(command_buffer, .graphics, pipeline_data.pipeline);
+            self.vkd.cmdBindPipeline(command_buffer, .graphics, internals.pipeline.pipeline);
 
             const viewports = [_]vk.Viewport{.{
                 .x = 0,
@@ -1113,12 +1108,12 @@ pub const VulkanBackend = struct {
                 self.vkd.cmdBindDescriptorSets(
                     command_buffer,
                     .graphics,
-                    pipeline_data.pipeline_layout,
+                    internals.pipeline.pipeline_layout,
                     0,
                     1,
                     @ptrCast([*]const
                     vk.DescriptorSet,
-                    &program_data.descriptor_sets.?[self.current_frame]),
+                    &internals.descriptor_sets.?[self.current_frame]),
                     0,
                     undefined
                 );
@@ -1132,12 +1127,12 @@ pub const VulkanBackend = struct {
     }
 
     fn create_sync_objects(self: *Self) !void {
-        self.image_available_semaphores = try self.allocator.alloc(vk.Semaphore, config.MAX_FRAMES_IN_FLIGHT);
-        self.render_finished_semaphores = try self.allocator.alloc(vk.Semaphore, config.MAX_FRAMES_IN_FLIGHT);
-        self.in_flight_fences = try self.allocator.alloc(vk.Fence, config.MAX_FRAMES_IN_FLIGHT);
+        self.image_available_semaphores = try self.allocator.alloc(vk.Semaphore, CFG.MAX_FRAMES_IN_FLIGHT);
+        self.render_finished_semaphores = try self.allocator.alloc(vk.Semaphore, CFG.MAX_FRAMES_IN_FLIGHT);
+        self.in_flight_fences = try self.allocator.alloc(vk.Fence, CFG.MAX_FRAMES_IN_FLIGHT);
 
         var i: usize = 0;
-        while (i < config.MAX_FRAMES_IN_FLIGHT) : (i += 1) {
+        while (i < CFG.MAX_FRAMES_IN_FLIGHT) : (i += 1) {
             self.image_available_semaphores.?[i] = try self.vkd.createSemaphore(self.device, &.{ .flags = .{} }, null);
             self.render_finished_semaphores.?[i] = try self.vkd.createSemaphore(self.device, &.{ .flags = .{} }, null);
             self.in_flight_fences.?[i] = try self.vkd.createFence(self.device, &.{ .flags = .{ .signaled_bit = true } }, null);
@@ -1160,7 +1155,7 @@ pub const VulkanBackend = struct {
         self.vkd.unmapMemory(self.device, buffer.mem);
     }
 
-    pub fn draw_frame(self: *Self, render_data: *const RenderData, program: ResourceHandle) !void {
+    pub fn draw_frame(self: *Self, render_data: *const RenderData, internals_h: ResourceHandle) !void {
         _ = try self.vkd.waitForFences(self.device, 1, @ptrCast([*]const vk.Fence, &self.in_flight_fences.?[self.current_frame]), vk.TRUE, std.math.maxInt(u64));
 
         const result = self.vkd.acquireNextImageKHR(self.device, self.swap_chain, std.math.maxInt(u64), self.image_available_semaphores.?[self.current_frame], .null_handle) catch |err| switch (err) {
@@ -1175,13 +1170,13 @@ pub const VulkanBackend = struct {
             return error.ImageAcquireFailed;
         }
 
-        const program_data = self.get_shader_program(program);
-        try self.update_uniform_buffer(self.current_frame, program_data.uniform_buffers.?);
+        const internals = self.get_shader_internals(internals_h);
+        try self.update_uniform_buffer(self.current_frame, internals.uniform_buffers.?);
 
         try self.vkd.resetFences(self.device, 1, @ptrCast([*]const vk.Fence, &self.in_flight_fences.?[self.current_frame]));
 
         try self.vkd.resetCommandBuffer(self.command_buffers.?[self.current_frame], .{});
-        try self.record_command_buffer(self.command_buffers.?[self.current_frame], result.image_index, render_data, program_data);
+        try self.record_command_buffer(self.command_buffers.?[self.current_frame], result.image_index, render_data, internals);
 
         const wait_semaphores = [_]vk.Semaphore{self.image_available_semaphores.?[self.current_frame]};
         const wait_stages = [_]vk.PipelineStageFlags{.{ .color_attachment_output_bit = true }};
@@ -1217,7 +1212,7 @@ pub const VulkanBackend = struct {
             return error.ImagePresentFailed;
         }
 
-        self.current_frame = (self.current_frame + 1) % config.MAX_FRAMES_IN_FLIGHT;
+        self.current_frame = (self.current_frame + 1) % CFG.MAX_FRAMES_IN_FLIGHT;
     }
 
     fn create_shader_module(self: *Self, code: []const u8) !vk.ShaderModule {
@@ -1358,7 +1353,7 @@ pub const VulkanBackend = struct {
         var extensions = std.ArrayList([*:0]const u8).init(allocator);
         try extensions.appendSlice(GlfwWindow.get_required_instance_extensions() orelse @panic("failed to get extensions"));
 
-        if (config.enable_validation_layers) {
+        if (CFG.enable_validation_layers) {
             try extensions.append(vk.extension_info.ext_debug_utils.name);
         }
 
@@ -1411,8 +1406,8 @@ pub const VulkanBackend = struct {
 
     // ------------------------------------------
 
-    fn create_graphics_pipeline(self: *Self, render_pass: vk.RenderPass, descriptor_set_layout: vk.DescriptorSetLayout, attribute_descriptions: []const vk.VertexInputAttributeDescription) !ResourceHandle {
-        Logger.debug("create graphics-pipeline '{}'\n", .{ self.pipelines.items.len });
+    fn create_graphics_pipeline(self: *Self, render_pass: vk.RenderPass, descriptor_set_layout: vk.DescriptorSetLayout, attribute_descriptions: []const vk.VertexInputAttributeDescription) !GraphicsPipeline {
+        Logger.debug("create graphics-pipeline\n", .{});
 
         const vert_shader_module: vk.ShaderModule = try self.create_shader_module(&resources.vert_27);
         defer self.vkd.destroyShaderModule(self.device, vert_shader_module, null);
@@ -1563,78 +1558,75 @@ pub const VulkanBackend = struct {
             @ptrCast([*]vk.Pipeline, &pipeline),
         );
 
-        try self.pipelines.append(GraphicsPipeline {
+        return GraphicsPipeline {
             .render_pass = render_pass,
             .descriptor_set_layout = descriptor_set_layout,
             .pipeline = pipeline,
             .pipeline_layout = pipeline_layout,
-        });
-
-        return ResourceHandle { .value = self.pipelines.items.len - 1 };
+        };
     }
 
-    fn destroy_graphics_pipeline(self: *Self, handle: ResourceHandle) void {
-        Logger.debug("destroy graphics-pipeline '{}'\n", .{ handle.value });
+    fn destroy_graphics_pipeline(self: *Self, pipeline: *GraphicsPipeline) void {
+        Logger.debug("destroy graphics-pipeline\n", .{});
 
-        var pipeline = self.pipelines.items[handle.value];
         self.vkd.destroyPipeline(self.device, pipeline.pipeline, null);
         self.vkd.destroyPipelineLayout(self.device, pipeline.pipeline_layout, null);
         self.vkd.destroyRenderPass(self.device, pipeline.render_pass, null);
         self.vkd.destroyDescriptorSetLayout(self.device, pipeline.descriptor_set_layout, null);
     }
 
-    pub fn get_graphics_pipeline(self: *Self, handle: ResourceHandle) GraphicsPipeline {
-        return self.pipelines.items[handle.value];
-    }
-
     // ------------------------------------------
 
-    pub fn create_shader_program(self: *Self, texture_image: ResourceHandle) !ResourceHandle {
-        Logger.info("creating shader-program\n", .{});
+    pub fn create_shader_internals(self: *Self, config: *const ShaderConfig, texture_h: ResourceHandle) !ResourceHandle {
+        Logger.debug("creating shader-program\n", .{});
 
-        var program = ShaderProgram{};
+        var internals = ShaderInternals {};
 
-        program.add_attribute(.r32g32b32_sfloat, 0, 0);
-        program.add_attribute(.r32g32b32_sfloat, 0, 1);
-        program.add_attribute(.r32g32_sfloat,    0, 2);
+        // create attributes
+        {
+            var attr_stride: usize = 0;
 
-        const descriptor_set_layout = try self.create_descriptor_set_layout();
-        const pipeline = try self.create_graphics_pipeline(self.render_pass, descriptor_set_layout, program.attributes.as_slice());
+            for (config.attributes.as_slice()) |attr| {
+                internals.attributes.push(.{
+                    .binding  = @intCast(u32, attr.binding),
+                    .location = @intCast(u32, attr.location),
+                    .format   = attr.format.to_vk_format(),
+                    .offset   = @intCast(u32, attr_stride),
+                });
 
-        const uniform_buffers = try self.create_uniform_buffers();
-        const descriptor_pool = try self.create_descriptor_pool();
-        const descriptor_sets = try self.create_descriptor_sets(texture_image, pipeline, descriptor_pool, uniform_buffers);
+                attr_stride += attr.format.size();
+            }
+        }
 
-        program.descriptor_set_layout = descriptor_set_layout;
-        program.pipeline = pipeline;
-        program.uniform_buffers = uniform_buffers;
-        program.descriptor_pool = descriptor_pool;
-        program.descriptor_sets = descriptor_sets;
+        internals.descriptor_set_layout = try self.create_descriptor_set_layout();
+        internals.pipeline              = try self.create_graphics_pipeline(self.render_pass, internals.descriptor_set_layout, internals.attributes.as_slice());
+        internals.uniform_buffers       = try self.create_uniform_buffers();
+        internals.descriptor_pool       = try self.create_descriptor_pool();
+        internals.descriptor_sets       = try self.create_descriptor_sets(texture_h, &internals.pipeline, internals.descriptor_pool, internals.uniform_buffers.?);
 
-        const slot = self.programs.add(program);
-
+        const slot = self.internals.add(internals);
         return ResourceHandle { .value = slot };
     }
 
-    pub fn destroy_shader_program(self: *Self, handle: ResourceHandle) void {
-        Logger.info("destroying shader-program '{}'\n", .{ handle });
-        var program_data = self.get_shader_program(handle);
+    pub fn destroy_shader_internals(self: *Self, internals_h: ResourceHandle) void {
+        Logger.debug("destroying shader-internals'{}'\n", .{ internals_h });
+        var internals = self.get_shader_internals(internals_h);
 
-        if (program_data.uniform_buffers != null) {
-            for (program_data.uniform_buffers.?) |uniform_buffer| {
+        if (internals.uniform_buffers != null) {
+            for (internals.uniform_buffers.?) |uniform_buffer| {
                 self.free_buffer(uniform_buffer);
             }
-            self.allocator.free(program_data.uniform_buffers.?);
+            self.allocator.free(internals.uniform_buffers.?);
         }
 
-        if (program_data.descriptor_pool != .null_handle) self.vkd.destroyDescriptorPool(self.device, program_data.descriptor_pool, null);
-        if (program_data.descriptor_sets != null) self.allocator.free(program_data.descriptor_sets.?);
+        if (internals.descriptor_pool != .null_handle) self.vkd.destroyDescriptorPool(self.device, internals.descriptor_pool, null);
+        if (internals.descriptor_sets != null) self.allocator.free(internals.descriptor_sets.?);
 
-        self.destroy_graphics_pipeline(program_data.pipeline);
+        self.destroy_graphics_pipeline(&internals.pipeline);
     }
 
-    pub fn get_shader_program(self: *const Self, handle: ResourceHandle) *const ShaderProgram {
-        return self.programs.get_ref(handle.value);
+    pub fn get_shader_internals(self: *Self, internals_h: ResourceHandle) *ShaderInternals {
+        return self.internals.get_mut(internals_h.value);
     }
 
     // ------------------------------------------

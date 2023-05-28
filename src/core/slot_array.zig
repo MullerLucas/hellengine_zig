@@ -39,12 +39,12 @@ pub fn SlotArray(comptime T: type, comptime array_capacity: usize) type {
             return self.data[idx];
         }
 
-        pub fn get_mut(self: *const Self, idx: usize) *T {
+        pub fn get_ref(self: *const Self, idx: usize) *const T {
             assert(!self.is_free[idx]);
             return &self.data[idx];
         }
 
-        pub inline fn get_ref(self: *const Self, idx: usize) *const T {
+        pub fn get_mut(self: *Self, idx: usize) *T {
             assert(!self.is_free[idx]);
             return &self.data[idx];
         }
