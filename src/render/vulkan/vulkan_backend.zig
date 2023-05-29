@@ -32,6 +32,7 @@ const GraphicsPipeline   = vulkan.GraphicsPipeline;
 
 const ShaderInternals = vulkan.ShaderInternals;
 const ShaderScope = render.shader.ShaderScope;
+const ShaderScopeInternals = vulkan.ShaderInternals;
 
 
 const c = @cImport({
@@ -42,6 +43,9 @@ const c = @cImport({
 
 const validation_layers = [_][*:0]const u8{"VK_LAYER_KHRONOS_validation"};
 const device_extensions = [_][*:0]const u8{vk.extension_info.khr_swapchain.name};
+const ubo_binding_idx = 0;
+const sampler_binding_idx = 1;
+
 
 // ----------------------------------------------
 
@@ -1058,7 +1062,7 @@ pub const VulkanBackend = struct {
         }
     }
 
-    pub fn draw_frame(self: *Self, render_data: *const RenderData, internals_h: ResourceHandle) !void {
+    pub fn draw_frame(self: *Self, render_data: *const RenderData, info: *const ShaderInfo, internals_h: ResourceHandle) !void {
         _ = try self.vkd.waitForFences(self.device, 1, @ptrCast([*]const vk.Fence, &self.in_flight_fences.?[self.current_frame]), vk.TRUE, std.math.maxInt(u64));
 
         const result = self.vkd.acquireNextImageKHR(self.device, self.swap_chain, std.math.maxInt(u64), self.image_available_semaphores.?[self.current_frame], .null_handle) catch |err| switch (err) {
@@ -1075,7 +1079,8 @@ pub const VulkanBackend = struct {
 
         const internals = self.get_shader_internals(internals_h);
         // try self.update_uniform_buffer(self.current_frame, internals.uniform_buffers.?);
-        try self.update_shader_uniform_buffer(self.current_frame, internals);
+        // TODO(lm):
+        try self.update_shader_uniform_buffer(render_data.meshes[0].texture, info, internals);
 
         try self.vkd.resetFences(self.device, 1, @ptrCast([*]const vk.Fence, &self.in_flight_fences.?[self.current_frame]));
 
@@ -1337,6 +1342,7 @@ pub const VulkanBackend = struct {
             },
         };
 
+        // TODO(lm): don't hardcode
         const binding_description    = Vertex.get_binding_description();
         // const attribute_descriptions = Vertex.get_attribute_descriptions();
 
@@ -1513,7 +1519,7 @@ pub const VulkanBackend = struct {
             var total_buffer_range: usize  = 0;
             for (0..3) |scope_idx| {
                 const scope_info    = info.scopes[scope_idx];
-                var scope_internals = internals.scopes[scope_idx];
+                var scope_internals = &internals.scopes[scope_idx];
                 scope_internals.buffer_offset = total_buffer_range;
 
                 for (scope_info.buffers.items) |buff| {
@@ -1532,39 +1538,43 @@ pub const VulkanBackend = struct {
 
         // create descriptor-sets
         {
-            const ubo_binding_idx = 0;
-            const sampler_binding_idx = 1;
-
             internals.descriptor_pool = try self.create_descriptor_pool();
 
             for (info.scopes, 0..) |scope, idx| {
                 // create layout
                 // -------------
                 var bindings = DescriptorSetLayoutBindingStack{};
-                var scope_internals = internals.scopes[idx];
+                var scope_internals = &internals.scopes[idx];
 
-                if (idx != @enumToInt(render.shader.ShaderScope.local)) {
-                    // use uniform-buffers for non-local scopes
-                    bindings.push(.{
-                        .binding = ubo_binding_idx,
-                        .descriptor_count = 1,
-                        .descriptor_type = .uniform_buffer,
-                        .p_immutable_samplers = null,
-                        .stage_flags = .{ .vertex_bit = true, .fragment_bit = true },
-                    });
-                }
-                else {
-                    // use storage-buffers for local scope
-                    bindings.push(.{
-                        .binding = ubo_binding_idx,
-                        .descriptor_count = 1,
-                        .descriptor_type = .storage_buffer,
-                        .p_immutable_samplers = null,
-                        .stage_flags = .{ .vertex_bit = true, .fragment_bit = true },
-                    });
+                if (!scope.buffers.is_empty()) {
+                    if (idx != @enumToInt(render.shader.ShaderScope.local)) {
+                        Logger.debug("add uniform-buffer to scope {} at binding {}\n", .{idx, ubo_binding_idx});
+
+                        // use uniform-buffers for non-local scopes
+                        bindings.push(.{
+                            .binding = ubo_binding_idx,
+                            .descriptor_count = 1,
+                            .descriptor_type = .uniform_buffer,
+                            .p_immutable_samplers = null,
+                            .stage_flags = .{ .vertex_bit = true, .fragment_bit = true },
+                        });
+                    }
+                    else {
+                        Logger.debug("add storage-buffer to scope {} at binding {}\n", .{idx, ubo_binding_idx});
+
+                        // use storage-buffers for local scope
+                        bindings.push(.{
+                            .binding = ubo_binding_idx,
+                            .descriptor_count = 1,
+                            .descriptor_type = .storage_buffer,
+                            .p_immutable_samplers = null,
+                            .stage_flags = .{ .vertex_bit = true, .fragment_bit = true },
+                        });
+                    }
                 }
 
                 if (!scope.samplers.is_empty()) {
+                    Logger.debug("add sampler-layout to scope {} at binding {} with {} samplers\n", .{idx, sampler_binding_idx, scope.samplers.len});
                     bindings.push(.{
                         .binding = sampler_binding_idx,
                         .descriptor_count = @intCast(u32, scope.samplers.len),
@@ -1574,10 +1584,12 @@ pub const VulkanBackend = struct {
                     });
                 }
 
-                const layout_info = vk.DescriptorSetLayoutCreateInfo{
-                    .flags = .{},
+                // NOTE(lm): when there are no bindings, we are still creating an empty set, so that we don't have to use dynamic set indices
+                //           -> set 0 is always 'global', set 3 is always 'local'
+                const layout_info = vk.DescriptorSetLayoutCreateInfo {
+                    .flags         = .{},
                     .binding_count = @intCast(u32, bindings.len),
-                    .p_bindings = &bindings.items,
+                    .p_bindings    = if (bindings.is_empty()) null else &bindings.items,
                 };
 
                 scope_internals.descriptor_set_layout = try self.vkd.createDescriptorSetLayout(self.device, &layout_info, null);
@@ -1605,7 +1617,6 @@ pub const VulkanBackend = struct {
             all_layouts[idx] = internals.scopes[idx].descriptor_set_layout;
         }
 
-        // TODO: continue
         internals.pipeline = try self.create_graphics_pipeline(self.render_pass, all_layouts[0..], internals.attributes.as_slice());
 
         const slot = self.internals.add(internals);
@@ -1661,8 +1672,7 @@ pub const VulkanBackend = struct {
     //     self.vkd.unmapMemory(self.device, buffer.mem);
     // }
 
-    fn update_shader_uniform_buffer(self: *Self, current_image: u32, internals: *ShaderInternals) !void {
-        _ = current_image;
+    fn update_shader_uniform_buffer(self: *Self, tex_image: ResourceHandle, info: *const ShaderInfo, internals: *const ShaderInternals) !void {
         const time: f32 = (@intToFloat(f32, (try std.time.Instant.now()).since(self.start_time)) / @intToFloat(f32, std.time.ns_per_s));
 
         var ubo = UniformBufferObject{
@@ -1678,6 +1688,8 @@ pub const VulkanBackend = struct {
             internals.mapped_uniform_buffer[0..@sizeOf(UniformBufferObject)],
             std.mem.asBytes(&ubo)
         );
+
+        try self.apply_normal_scope(.global, info, internals, tex_image);
     }
 
     // fn create_descriptor_set_layout(self: *Self, info: *ShaderInfo) !vk.DescriptorSetLayout {
@@ -1767,17 +1779,13 @@ pub const VulkanBackend = struct {
 
     fn apply_normal_scope(
         self: *Self,
-        info: ShaderInfo,
         scope: ShaderScope,
-        internals: *ShaderInternals,
+        info: *const ShaderInfo,
+        internals: *const ShaderInternals,
         texture_image: ResourceHandle,
-        pipeline: *const GraphicsPipeline,
-        descriptor_pool: vk.DescriptorPool
     ) !void
     {
-        _ = descriptor_pool;
-        _ = pipeline;
-        const scope_internals = internals.scope[@enumToInt(scope)];
+        const scope_internals = internals.scopes[@enumToInt(scope)];
         const scope_info      = info.scopes[@enumToInt(scope)];
         const descriptor_set = scope_internals.descriptor_sets[self.current_frame];
 
@@ -1818,7 +1826,7 @@ pub const VulkanBackend = struct {
                 .descriptor_type = .combined_image_sampler,
                 .descriptor_count = 1,
                 .p_buffer_info = undefined,
-                .p_image_info = &image_info,
+                .p_image_info = &image_info.items,
                 .p_texel_buffer_view = undefined,
             },
         };

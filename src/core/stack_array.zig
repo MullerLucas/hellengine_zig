@@ -10,7 +10,7 @@ pub fn StackArray(comptime T: type, comptime capacity: usize) type {
         len: usize = 0,
 
         pub fn push(self: *Self, value: T) void {
-            std.debug.assert(self.len < (capacity - 1));
+            std.debug.assert(self.len < capacity);
             self.items[self.len] = value;
             self.len += 1;
         }
@@ -22,7 +22,7 @@ pub fn StackArray(comptime T: type, comptime capacity: usize) type {
         }
 
         pub inline fn is_full(self: *const Self) bool {
-            return self.len == (capacity - 1);
+            return self.len == capacity;
         }
 
         pub inline fn is_empty(self: *const Self) bool {

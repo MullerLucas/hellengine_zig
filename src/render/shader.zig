@@ -60,12 +60,14 @@ pub const ShaderInfo = struct {
     scopes:     [4]ShaderScopeInfo = [_]ShaderScopeInfo { .{} } ** 4,
 
     pub fn deinit(self: *ShaderInfo) void {
+        Logger.debug("deinitializing shader-info\n", .{});
+
         // TODO(lm): improve
         for (self.scopes) |scope| {
-            for (scope.buffers.items) |buffer| {
+            for (scope.buffers.as_slice()) |buffer| {
                 buffer.name.deinit();
             }
-            for (scope.samplers.items) |sampler| {
+            for (scope.samplers.as_slice()) |sampler| {
                 sampler.name.deinit();
             }
         }
@@ -85,6 +87,15 @@ pub const ShaderInfo = struct {
         Logger.debug("add uniform-info with scope {}, name {s} and size {}\n", .{scope, name, size});
 
         self.scopes[@enumToInt(scope)].buffers.push(ShaderUniformInfo {
+            .name = try String.from_slice(allocator, name),
+            .size = size,
+        });
+    }
+
+    pub fn add_sampler(self: *ShaderInfo, allocator: std.mem.Allocator, scope: ShaderScope, name: []const u8, size: usize) !void {
+        Logger.debug("add sampler-info with scope {}, name {s} and size {}\n", .{scope, name, size});
+
+        self.scopes[@enumToInt(scope)].samplers.push(ShaderUniformInfo {
             .name = try String.from_slice(allocator, name),
             .size = size,
         });

@@ -45,7 +45,7 @@ pub const Renderer = struct {
         }
 
         self.frame_timer.start_frame();
-        try self.backend.draw_frame(render_data, program.internals_h);
+        try self.backend.draw_frame(render_data, &program.info, program.internals_h);
         self.frame_timer.stop_frame();
     }
 
@@ -67,8 +67,8 @@ pub const Renderer = struct {
 
     pub fn destroy_shader_program(self: *Renderer, program: *ShaderProgram) void {
         Logger.debug("destroy shader-program\n", .{});
-        program.info.deinit();
         self.backend.destroy_shader_internals_h(program.internals_h);
+        program.deinit();
     }
 
     // ------------------------------------------

@@ -55,6 +55,7 @@ pub const TestScene = struct {
             shader_config.add_attribute(.r32g32_sfloat,    0, 2);
 
             try shader_config.add_uniform(allocator, .global, "my_ubo", @sizeOf(render.UniformBufferObject));
+            try shader_config.add_sampler(allocator, .global, "my_sampler", @sizeOf(render.UniformBufferObject));
 
             self.program = try self.renderer.create_shader_program(shader_config, self.meshes.items[0].texture);
         }
@@ -74,7 +75,6 @@ pub const TestScene = struct {
         self.meshes.deinit();
 
         self.renderer.destroy_shader_program(&self.program);
-        self.program.deinit();
         self.program = undefined;
     }
 
