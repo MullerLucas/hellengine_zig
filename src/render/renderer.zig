@@ -19,6 +19,7 @@ const ShaderInfo = render.ShaderInfo;
 // ----------------------------------------------
 
 pub const Renderer = struct {
+    allocator: std.mem.Allocator,
     frame_timer: FrameTimer,
     backend: VulkanBackend,
 
@@ -29,6 +30,7 @@ pub const Renderer = struct {
         defer Logger.debug("renderer initialized in {} us\n", .{timer.read_us()});
 
         return Renderer {
+            .allocator   = allocator,
             .frame_timer = try FrameTimer.init(),
             .backend     = try VulkanBackend.init(allocator, window),
         };
@@ -45,7 +47,7 @@ pub const Renderer = struct {
         }
 
         self.frame_timer.start_frame();
-        try self.backend.draw_frame(render_data, &program.info, program.internals_h);
+        try self.backend.draw_frame(render_data, &program.info, &program.internals);
         self.frame_timer.stop_frame();
     }
 
@@ -55,20 +57,25 @@ pub const Renderer = struct {
 
     // ------------------------------------------
 
-    pub fn create_shader_program(self: *Renderer, info: ShaderInfo, texture_h: ResourceHandle) !ShaderProgram {
+    pub fn create_shader_program(self: *Renderer, info: ShaderInfo) !*ShaderProgram {
         Logger.debug("creating shader-program\n", .{});
-        const internals = try self.backend.create_shader_internals(&info, texture_h);
 
-        return ShaderProgram {
+        var program = try self.allocator.create(ShaderProgram);
+        program.* = ShaderProgram {
             .info = info,
-            .internals_h = internals,
         };
+
+        try self.backend.create_shader_internals(&info, &program.internals);
+        try self.backend.shader_aquire_instance_resources(&info, &program.internals, .global, ResourceHandle { .value = 0 });
+
+        return program;
     }
 
     pub fn destroy_shader_program(self: *Renderer, program: *ShaderProgram) void {
         Logger.debug("destroy shader-program\n", .{});
-        self.backend.destroy_shader_internals_h(program.internals_h);
+        self.backend.destroy_shader_internals(&program.internals);
         program.deinit();
+        self.allocator.destroy(program);
     }
 
     // ------------------------------------------

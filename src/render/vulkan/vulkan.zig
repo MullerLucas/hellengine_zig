@@ -14,6 +14,7 @@ pub const GraphicsPipelineArrayList = vulkan_types.GraphicsPipelineArrayList;
 
 pub const ShaderInternals = vulkan_types.ShaderInternals;
 pub const ShaderScopeInternals = vulkan_types.ShaderScopeInternals;
+pub const ShaderInstanceInternals = vulkan_types.ShaderInstanceInternals;
 
 pub const Logger = @import("../../core/log.zig").scoped(.vulkan);
 

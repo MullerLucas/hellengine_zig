@@ -11,9 +11,11 @@ const core   = @import("./core/core.zig");
 const Logger = core.log.scoped(.app);
 const ResourceHandle = core.ResourceHandle;
 
-const ShaderConfig  = render.ShaderInfo;
+const ShaderInfo  = render.ShaderInfo;
 const ShaderProgram = render.ShaderProgram;
 const ShaderScope   = render.shader.ShaderScope;
+
+const za = @import("zalgebra");
 
 // ----------------------------------------------g
 
@@ -21,7 +23,7 @@ pub const TestScene = struct {
     renderer: *Renderer,
     meshes: MeshList,
     render_data: RenderData,
-    program: ShaderProgram = undefined,
+    program: *ShaderProgram = undefined,
 
     pub fn init(allocator: std.mem.Allocator, renderer: *Renderer) !TestScene {
         Logger.info("initializing test-scene\n", .{});
@@ -49,15 +51,18 @@ pub const TestScene = struct {
 
         // create shader-program
         {
-            var shader_config = ShaderConfig { };
-            shader_config.add_attribute(.r32g32b32_sfloat, 0, 0);
-            shader_config.add_attribute(.r32g32b32_sfloat, 0, 1);
-            shader_config.add_attribute(.r32g32_sfloat,    0, 2);
+            var shader_info = ShaderInfo { };
+            shader_info.add_attribute(.r32g32b32_sfloat, 0, 0);
+            shader_info.add_attribute(.r32g32b32_sfloat, 0, 1);
+            shader_info.add_attribute(.r32g32_sfloat,    0, 2);
 
-            try shader_config.add_uniform(allocator, .global, "my_ubo", @sizeOf(render.UniformBufferObject));
-            try shader_config.add_sampler(allocator, .global, "my_sampler", @sizeOf(render.UniformBufferObject));
+            // try shader_config.add_uniform(allocator, .global, "my_ubo", @sizeOf(render.UniformBufferObject));
+            try shader_info.add_uniform(allocator, .global, "model", @sizeOf(za.Mat4));
+            try shader_info.add_uniform(allocator, .global, "view",  @sizeOf(za.Mat4));
+            try shader_info.add_uniform(allocator, .global, "proj",  @sizeOf(za.Mat4));
+            try shader_info.add_sampler(allocator, .global, "my_sampler");
 
-            self.program = try self.renderer.create_shader_program(shader_config, self.meshes.items[0].texture);
+            self.program = try self.renderer.create_shader_program(shader_info);
         }
 
         return self;
@@ -74,7 +79,7 @@ pub const TestScene = struct {
 
         self.meshes.deinit();
 
-        self.renderer.destroy_shader_program(&self.program);
+        self.renderer.destroy_shader_program(self.program);
         self.program = undefined;
     }
 

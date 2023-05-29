@@ -11,6 +11,8 @@ const ResourceHandle = core.ResourceHandle;
 const Logger = core.log.scoped(.render);
 const String = core.String;
 
+const vulkan = @import("vulkan/vulkan.zig");
+
 
 pub const ShaderAttribute = struct {
     format: NumberFormat,
@@ -26,15 +28,15 @@ pub const ShaderAttributeInfo = struct {
     location: usize,
 };
 
-pub const ShaderAttributeInfoArray = core.StackArray(ShaderAttributeInfo, config.shader_attribute_limit);
+pub const ShaderAttributeInfoArray = core.StackArray(ShaderAttributeInfo, config.max_attributes_per_shader);
 
 // ----------------------------------------------
 
 pub const ShaderScope = enum(usize) {
-    global   = 0,
-    shared   = 1,
-    instance = 2,
-    local    = 3,
+    global = 0,
+    module = 1,
+    unit   = 2,
+    local  = 3,
 };
 
 // ----------------------------------------------
@@ -44,20 +46,34 @@ pub const ShaderUniformInfo = struct {
     size: usize,
 };
 
-pub const ShaderUniformInfoArray = core.StackArray(ShaderUniformInfo, config.shader_attribute_limit);
+pub const ShaderUniformInfoArray = core.StackArray(ShaderUniformInfo, config.max_uniform_buffers_per_shader);
+
+// ----------------------------------------------
+
+pub const ShaderSamplerInfo = struct {
+    name: String,
+};
+
+pub const ShaderSamplerInfoArray = core.StackArray(ShaderSamplerInfo, config.max_uniform_samplers_per_shader);
 
 // ----------------------------------------------
 
 pub const ShaderScopeInfo = struct {
-    buffers: ShaderUniformInfoArray = .{},
-    samplers: ShaderUniformInfoArray = .{},
+    buffers:  ShaderUniformInfoArray = .{},
+    samplers: ShaderSamplerInfoArray = .{},
+    instance_count: usize = 1,
 };
 
 // ----------------------------------------------
 
 pub const ShaderInfo = struct {
     attributes: ShaderAttributeInfoArray  = .{},
-    scopes:     [4]ShaderScopeInfo = [_]ShaderScopeInfo { .{} } ** 4,
+    scopes: [4]ShaderScopeInfo = [_]ShaderScopeInfo {
+        .{ .instance_count = 1 },
+        .{ .instance_count = 1 },
+        .{ .instance_count = config.shader_instance_limit },
+        .{ .instance_count = 1 },
+    },
 
     pub fn deinit(self: *ShaderInfo) void {
         Logger.debug("deinitializing shader-info\n", .{});
@@ -92,12 +108,11 @@ pub const ShaderInfo = struct {
         });
     }
 
-    pub fn add_sampler(self: *ShaderInfo, allocator: std.mem.Allocator, scope: ShaderScope, name: []const u8, size: usize) !void {
-        Logger.debug("add sampler-info with scope {}, name {s} and size {}\n", .{scope, name, size});
+    pub fn add_sampler(self: *ShaderInfo, allocator: std.mem.Allocator, scope: ShaderScope, name: []const u8) !void {
+        Logger.debug("add sampler-info with scope {}, name {s}\n", .{scope, name});
 
-        self.scopes[@enumToInt(scope)].samplers.push(ShaderUniformInfo {
+        self.scopes[@enumToInt(scope)].samplers.push(ShaderSamplerInfo {
             .name = try String.from_slice(allocator, name),
-            .size = size,
         });
     }
 };
@@ -107,7 +122,7 @@ pub const ShaderInfo = struct {
 pub const ShaderProgram = struct {
     info: ShaderInfo,
     /// data specific to the used backend
-    internals_h: ResourceHandle = ResourceHandle.invalid,
+    internals: vulkan.ShaderInternals = undefined,
 
     pub fn deinit(self: *ShaderProgram) void {
         self.info.deinit();

@@ -148,7 +148,7 @@ pub const GraphicsPipeline = struct {
 
 // ----------------------------------------------
 
-pub const ShaderAttributeArray = core.StackArray(vk.VertexInputAttributeDescription, CFG.shader_attribute_limit);
+pub const ShaderAttributeArray = core.StackArray(vk.VertexInputAttributeDescription, CFG.max_attributes_per_shader);
 
 pub const ShaderInternals = struct {
     scopes: [4]ShaderScopeInternals = [_]ShaderScopeInternals { .{} } ** 4,
@@ -168,10 +168,22 @@ pub const ShaderInternals = struct {
 };
 
 // ----------------------------------------------
+// pub const ShaderInstanceInternalsArray = core.StackArray(ShaderInstanceInternals, CFG.max_scope_instances_per_shader);
 
 pub const ShaderScopeInternals = struct {
     buffer_offset: usize = 0,
-    buffer_range: usize = 0,
+    buffer_size:   usize = 0,
+    buffer_stride: usize = 0,
+
     descriptor_set_layout: vk.DescriptorSetLayout = .null_handle,
+
+    // TODO(lm): optimize - most scopes only have one instance
+    instances: core.StackArray(ShaderInstanceInternals, CFG.max_scope_instances_per_shader) = .{},
+};
+
+// ----------------------------------------------
+
+pub const ShaderInstanceInternals = struct {
+    texture_images:  [CFG.max_uniform_samplers_per_shader]ResourceHandle = [_]ResourceHandle { ResourceHandle.invalid } ** CFG.max_uniform_samplers_per_instance,
     descriptor_sets: [CFG.MAX_FRAMES_IN_FLIGHT]vk.DescriptorSet = [_]vk.DescriptorSet { .null_handle } ** CFG.MAX_FRAMES_IN_FLIGHT,
 };
