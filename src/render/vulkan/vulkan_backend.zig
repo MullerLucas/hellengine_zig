@@ -13,12 +13,12 @@ const resources = @import("resources");
 const core           = @import("../../core/core.zig");
 const SlotArray      = core.SlotArray;
 const ResourceHandle = core.ResourceHandle;
+const Range          = core.Range;
 
 const render              = @import("../render.zig");
 const Vertex              = render.Vertex;
 const RenderData          = render.RenderData;
 const UniformBufferObject = render.UniformBufferObject;
-// const ShaderProgram       = render.ShaderProgram;
 const ShaderInfo        = render.ShaderInfo;
 
 const vulkan     = @import("./vulkan.zig");
@@ -29,6 +29,7 @@ const Image      = vulkan.Image;
 const ImageArrayList     = vulkan.ImageArrayList;
 const QueueFamilyIndices = vulkan.QueueFamilyIndices;
 const GraphicsPipeline   = vulkan.GraphicsPipeline;
+const SwapChainSupportDetails = vulkan.SwapChainSupportDetails;
 
 const ShaderInternals = vulkan.ShaderInternals;
 const ShaderScope = render.shader.ShaderScope;
@@ -47,29 +48,25 @@ const device_extensions = [_][*:0]const u8{vk.extension_info.khr_swapchain.name}
 const ubo_binding_idx = 0;
 const sampler_binding_idx = 1;
 
-
-// ----------------------------------------------
-
-pub const SwapChainSupportDetails = struct {
-    allocator: Allocator,
-    capabilities: vk.SurfaceCapabilitiesKHR = undefined,
-    formats: ?[]vk.SurfaceFormatKHR = null,
-    present_modes: ?[]vk.PresentModeKHR = null,
-
-    pub fn init(allocator: Allocator) SwapChainSupportDetails {
-        return .{ .allocator = allocator };
-    }
-
-    pub fn deinit(self: SwapChainSupportDetails) void {
-        if (self.formats != null) self.allocator.free(self.formats.?);
-        if (self.present_modes != null) self.allocator.free(self.present_modes.?);
-    }
-};
-
 // ----------------------------------------------
 
 const DescriptorSetLayoutBindingStack = core.StackArray(vk.DescriptorSetLayoutBinding, 2);
 const DescriptorImageInfoStack = core.StackArray(vk.DescriptorImageInfo, CFG.max_uniform_samplers_per_shader);
+
+// ----------------------------------------------
+
+pub const MemRange = Range(usize);
+
+fn get_aligned(operand: usize, granularity: usize) usize {
+    return ((operand + (granularity - 1)) & ~(granularity - 1));
+}
+
+fn get_aligned_range(offset: usize, size: usize, granularity: usize) MemRange {
+    return .{
+        .offset = get_aligned(offset, granularity),
+        .size   = get_aligned(size, granularity)
+    };
+}
 
 // ----------------------------------------------
 
@@ -99,7 +96,6 @@ pub const VulkanBackend = struct {
     swap_chain_extent: vk.Extent2D = .{ .width = 0, .height = 0 },
     swap_chain_image_views: ?[]vk.ImageView = null,
     swap_chain_framebuffers: ?[]vk.Framebuffer = null,
-
 
     command_pool: vk.CommandPool = .null_handle,
 
@@ -817,20 +813,6 @@ pub const VulkanBackend = struct {
         return index_buffer_handle;
     }
 
-    // fn create_uniform_buffers(self: *Self) ![]ResourceHandle {
-    //     const buffer_size: vk.DeviceSize = @sizeOf(UniformBufferObject);
-    //
-    //     var uniform_buffer_handles = try self.allocator.alloc(ResourceHandle, CFG.MAX_FRAMES_IN_FLIGHT);
-    //
-    //     var i: usize = 0;
-    //     while (i < CFG.MAX_FRAMES_IN_FLIGHT) : (i += 1) {
-    //         // uniform_buffer_handles[i] = try self.create_buffer(buffer_size, .{ .uniform_buffer_bit = true }, .{ .host_visible_bit = true, .host_coherent_bit = true });
-    //         uniform_buffer_handles[i] = try self.create_uniform_buffer(buffer_size);
-    //     }
-    //
-    //     return uniform_buffer_handles;
-    // }
-
     inline fn create_uniform_buffer(self: *Self, buffer_size: vk.DeviceSize) !ResourceHandle {
         return try self.create_buffer(buffer_size, .{ .uniform_buffer_bit = true }, .{ .host_visible_bit = true, .host_coherent_bit = true });
     }
@@ -1340,8 +1322,7 @@ pub const VulkanBackend = struct {
         };
 
         // TODO(lm): don't hardcode
-        const binding_description    = Vertex.get_binding_description();
-        // const attribute_descriptions = Vertex.get_attribute_descriptions();
+        const binding_description = Vertex.get_binding_description();
 
         const vertex_input_info = vk.PipelineVertexInputStateCreateInfo {
             .flags = .{},
@@ -1432,7 +1413,6 @@ pub const VulkanBackend = struct {
         const pipeline_layout = try self.vkd.createPipelineLayout(self.device, &.{
             .flags = .{},
             .set_layout_count = @intCast(u32,descriptor_set_layouts.len),
-            // .p_set_layouts = @ptrCast([*]const vk.DescriptorSetLayout, &descriptor_set_layout),
             .p_set_layouts = @ptrCast([*]const vk.DescriptorSetLayout, descriptor_set_layouts),
             .push_constant_range_count = 0,
             .p_push_constant_ranges = undefined,
@@ -1591,21 +1571,6 @@ pub const VulkanBackend = struct {
                 };
 
                 scope_internals.descriptor_set_layout = try self.vkd.createDescriptorSetLayout(self.device, &layout_info, null);
-
-                // allocate one descriptor-set per frame
-                // -------------------------------------
-                // const layouts = [CFG.MAX_FRAMES_IN_FLIGHT]vk.DescriptorSetLayout {
-                //     scope_internals.descriptor_set_layout,
-                //     scope_internals.descriptor_set_layout,
-                // };
-                //
-                // const alloc_info = vk.DescriptorSetAllocateInfo {
-                //     .descriptor_pool = internals.descriptor_pool,
-                //     .descriptor_set_count = CFG.MAX_FRAMES_IN_FLIGHT,
-                //     .p_set_layouts = &layouts,
-                // };
-                //
-                // try self.vkd.allocateDescriptorSets(self.device, &alloc_info, &scope_internals.descriptor_sets);
             }
         }
 
@@ -1776,24 +1741,3 @@ pub const VulkanBackend = struct {
 
     // ------------------------------------------
 };
-
-pub fn Range(comptime T: type) type {
-    return struct {
-        offset: T,
-        size: T,
-    };
-}
-
-pub const MemRange = Range(usize);
-
-fn get_aligned(operand: usize, granularity: usize) usize {
-    return ((operand + (granularity - 1)) & ~(granularity - 1));
-}
-
-fn get_aligned_range(offset: usize, size: usize, granularity: usize) MemRange {
-    return .{
-        .offset = get_aligned(offset, granularity),
-        .size   = get_aligned(size, granularity)
-    };
-}
-

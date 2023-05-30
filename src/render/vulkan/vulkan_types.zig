@@ -120,6 +120,24 @@ pub const QueueFamilyIndices = struct {
 
 // ----------------------------------------------
 
+pub const SwapChainSupportDetails = struct {
+    allocator: std.mem.Allocator,
+    capabilities: vk.SurfaceCapabilitiesKHR = undefined,
+    formats: ?[]vk.SurfaceFormatKHR = null,
+    present_modes: ?[]vk.PresentModeKHR = null,
+
+    pub fn init(allocator: std.mem.Allocator) SwapChainSupportDetails {
+        return .{ .allocator = allocator };
+    }
+
+    pub fn deinit(self: SwapChainSupportDetails) void {
+        if (self.formats != null) self.allocator.free(self.formats.?);
+        if (self.present_modes != null) self.allocator.free(self.present_modes.?);
+    }
+};
+
+// ----------------------------------------------
+
 pub const Buffer = struct {
     mem: vk.DeviceMemory,
     buf: vk.Buffer,
@@ -153,9 +171,7 @@ pub const ShaderAttributeArray = core.StackArray(vk.VertexInputAttributeDescript
 pub const ShaderInternals = struct {
     scopes: [4]ShaderScopeInternals = [_]ShaderScopeInternals { .{} } ** 4,
     pipeline: GraphicsPipeline = .{},
-    // uniform_buffers: ?[]ResourceHandle = null,
     descriptor_pool: vk.DescriptorPool = .null_handle,
-    // descriptor_sets: ?[]vk.DescriptorSet = null,
 
     attributes: ShaderAttributeArray = .{},
 
@@ -168,7 +184,6 @@ pub const ShaderInternals = struct {
 };
 
 // ----------------------------------------------
-// pub const ShaderInstanceInternalsArray = core.StackArray(ShaderInstanceInternals, CFG.max_scope_instances_per_shader);
 
 pub const ShaderScopeInternals = struct {
     buffer_offset: usize = 0,

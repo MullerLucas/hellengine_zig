@@ -11,6 +11,7 @@ pub const Image              = vulkan_types.Image;
 pub const ImageArrayList     = vulkan_types.ImageArrayList;
 pub const GraphicsPipeline   = vulkan_types.GraphicsPipeline;
 pub const GraphicsPipelineArrayList = vulkan_types.GraphicsPipelineArrayList;
+pub const SwapChainSupportDetails   = vulkan_types.SwapChainSupportDetails;
 
 pub const ShaderInternals = vulkan_types.ShaderInternals;
 pub const ShaderScopeInternals = vulkan_types.ShaderScopeInternals;
