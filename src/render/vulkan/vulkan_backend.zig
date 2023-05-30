@@ -573,6 +573,7 @@ pub const VulkanBackend = struct {
         const pixels = c.stbi_load(path, &tex_width, &tex_height, &channels, c.STBI_rgb_alpha);
         defer c.stbi_image_free(pixels);
         if (pixels == null) {
+            Logger.err("failed to load image '{s}'\n", .{path});
             return error.ImageLoadFailure;
         }
 
@@ -1059,7 +1060,7 @@ pub const VulkanBackend = struct {
         }
 
         // TODO(lm):
-        try self.update_shader_uniform_buffer(render_data.meshes[0].texture, info, internals);
+        try self.update_shader_uniform_buffer(info, internals);
 
         try self.vkd.resetFences(self.device, 1, @ptrCast([*]const vk.Fence, &self.in_flight_fences.?[self.current_frame]));
 
@@ -1603,7 +1604,7 @@ pub const VulkanBackend = struct {
         return self.internals.get_mut(internals_h.value).*;
     }
 
-    fn update_shader_uniform_buffer(self: *Self, tex_image: ResourceHandle, info: *const ShaderInfo, internals: *const ShaderInternals) !void {
+    fn update_shader_uniform_buffer(self: *Self, info: *const ShaderInfo, internals: *const ShaderInternals) !void {
         const time: f32 = (@intToFloat(f32, (try std.time.Instant.now()).since(self.start_time)) / @intToFloat(f32, std.time.ns_per_s));
 
         var ubo = UniformBufferObject{
@@ -1615,44 +1616,14 @@ pub const VulkanBackend = struct {
 
         self.shader_set_uniform_buffer(internals, &ubo);
         // TODO(lm): use actuall instance-idx
-        try self.apply_uniform_scope(.global, 0, info, internals, tex_image);
+        try self.shader_apply_uniform_scope(.global, 0, info, internals);
     }
 
-    pub fn shader_bind_global_scope(self: Self, internals: *ShaderInternals) void {
-        _ = internals;
-        _ = self;
-    }
-
-    pub fn shader_bind_module_scope(self: Self, internals: *ShaderInternals) void {
-        _ = internals;
-        _ = self;
-    }
-
-    pub fn shader_bind_instance_scope(self: Self, internals: *ShaderInternals, instance_idx: usize) void {
-        _ = instance_idx;
-        _ = internals;
-        _ = self;
-    }
-
-    pub fn shader_bind_local_scope(self: Self, internals: *ShaderInternals) void {
-        _ = internals;
-        _ = self;
-    }
-
-    // TODO(lm): make value dynamic
-    /// update the uniform-buffer at the given location with new data
-    pub fn shader_set_uniform_buffer(_: *const Self, internals: *const ShaderInternals, value: *const UniformBufferObject) void {
-        @memcpy(
-            internals.mapped_uniform_buffer[0..@sizeOf(UniformBufferObject)],
-            std.mem.asBytes(value)
-        );
-    }
-
-    pub fn shader_aquire_instance_resources(self: *const Self, info: *const ShaderInfo, internals: *ShaderInternals, scope: ShaderScope, default_image: ResourceHandle) !void {
+    pub fn shader_acquire_instance_resources(self: *const Self, info: *const ShaderInfo, internals: *ShaderInternals, scope: ShaderScope, default_image: ResourceHandle) !void {
         const scope_info    = &info.scopes[@enumToInt(scope)];
         var scope_internals = &internals.scopes[@enumToInt(scope)];
 
-        Logger.debug("aquire instance resources for scope {} and instance {}\n", .{scope, scope_internals.instances.len});
+        Logger.debug("acquire instance resources for scope {} and instance {}\n", .{scope, scope_internals.instances.len});
 
         scope_internals.instances.push(ShaderInstanceInternals{});
         var instance_internals = &scope_internals.instances.items[scope_internals.instances.len - 1];
@@ -1660,7 +1631,7 @@ pub const VulkanBackend = struct {
         // set all textures to the default texture
         // TODO(lm): actually use default-texture
         for (0..scope_info.samplers.len) |idx| {
-            instance_internals.texture_images[idx] = default_image;
+            instance_internals.sampler_images[idx] = default_image;
         }
 
         // allocate descriptor-sets for this instance
@@ -1675,19 +1646,42 @@ pub const VulkanBackend = struct {
         try self.vkd.allocateDescriptorSets(self.device, &alloc_info, &instance_internals.descriptor_sets);
     }
 
-    pub fn shader_set_uniform_sampler(_: *const Self, internals: *const ShaderInternals, image_h: ResourceHandle) void {
-        _ = image_h;
-        _ = internals;
+    pub fn shader_bind_scope(_: *Self, internals: *ShaderInternals, scope: ShaderScope, instance_h: ResourceHandle) void {
+        internals.bound_scope = scope;
+        internals.bound_instance_h = instance_h;
+    }
+
+    /// scope and instance must be set before calling this function
+    pub fn shader_set_uniform_sampler(_: *const Self, internals: *ShaderInternals, images_h: []const ResourceHandle) void {
+        Logger.debug("set uniform sampler at scope {} and instance {} with {} images\n", .{internals.bound_scope, internals.bound_instance_h, images_h.len});
+
+        // TODO(lm): validate dynamic length
+        assert(images_h.len <= CFG.max_uniform_samplers_per_instance);
+
+        const scope_internals    = &internals.scopes[@enumToInt(internals.bound_scope)];
+        const instance_internals = &scope_internals.instances.items[internals.bound_instance_h.value];
+
+        for (images_h, 0..) |image_h, idx| {
+            instance_internals.sampler_images[idx] = image_h;
+        }
+    }
+
+    // TODO(lm): make value dynamic
+    /// update the uniform-buffer at the given location with new data
+    pub fn shader_set_uniform_buffer(_: *const Self, internals: *const ShaderInternals, value: *const UniformBufferObject) void {
+        @memcpy(
+            internals.mapped_uniform_buffer[0..@sizeOf(UniformBufferObject)],
+            std.mem.asBytes(value)
+        );
     }
 
     /// upload the data which is currently in the uniform-buffer
-    pub fn apply_uniform_scope(
+    pub fn shader_apply_uniform_scope(
         self: *Self,
         scope: ShaderScope,
         instance_idx: usize,
         info: *const ShaderInfo,
         internals: *const ShaderInternals,
-        texture_image: ResourceHandle,
     ) !void
     {
         const scope_info         = &info.scopes[@enumToInt(scope)];
@@ -1701,15 +1695,17 @@ pub const VulkanBackend = struct {
             .range  = scope_internals.buffer_stride,
         }};
 
-        // TODO (lm):
-        const texture_image_data = self.get_image(texture_image);
         var image_info = DescriptorImageInfoStack {};
 
-        for (scope_info.samplers.items) |_| {
+        for (scope_info.samplers.as_slice(), 0..) |_, idx| {
+            const sampler_image_h = instance_internals.sampler_images[idx];
+            assert(sampler_image_h.is_valid());
+            const sampler_image = self.get_image(sampler_image_h);
+
             image_info.push(.{
                 .image_layout = .shader_read_only_optimal,
-                .image_view = texture_image_data.view,
-                .sampler = texture_image_data.sampler.?, // TODO (lm): don't unwrap
+                .image_view = sampler_image.view,
+                .sampler = sampler_image.sampler.?, // TODO (lm): don't unwrap
             });
         }
 

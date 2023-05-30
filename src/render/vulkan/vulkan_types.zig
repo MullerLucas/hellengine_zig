@@ -178,6 +178,9 @@ pub const ShaderInternals = struct {
     uniform_buffer:         Buffer = undefined,
     mapped_uniform_buffer:  []u8   = undefined,
 
+    bound_scope: ShaderScope = .global,
+    bound_instance_h: ResourceHandle = ResourceHandle.invalid,
+
     pub fn get_scope(self: *const ShaderInternals, scope: ShaderScope) *const ShaderScopeInternals {
         return &self.scopes[@enumToInt(scope)];
     }
@@ -199,6 +202,6 @@ pub const ShaderScopeInternals = struct {
 // ----------------------------------------------
 
 pub const ShaderInstanceInternals = struct {
-    texture_images:  [CFG.max_uniform_samplers_per_shader]ResourceHandle = [_]ResourceHandle { ResourceHandle.invalid } ** CFG.max_uniform_samplers_per_instance,
+    sampler_images:  [CFG.max_uniform_samplers_per_shader]ResourceHandle = [_]ResourceHandle { ResourceHandle.invalid } ** CFG.max_uniform_samplers_per_instance,
     descriptor_sets: [CFG.MAX_FRAMES_IN_FLIGHT]vk.DescriptorSet = [_]vk.DescriptorSet { .null_handle } ** CFG.MAX_FRAMES_IN_FLIGHT,
 };

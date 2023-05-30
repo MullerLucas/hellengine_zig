@@ -66,7 +66,8 @@ pub const Renderer = struct {
         };
 
         try self.backend.create_shader_internals(&info, &program.internals);
-        try self.backend.shader_aquire_instance_resources(&info, &program.internals, .global, ResourceHandle { .value = 0 });
+        // TODO(lm): move somewhere else
+        try self.backend.shader_acquire_instance_resources(&info, &program.internals, .global, ResourceHandle { .value = 0 });
 
         return program;
     }

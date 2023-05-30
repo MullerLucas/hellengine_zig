@@ -24,6 +24,7 @@ pub const TestScene = struct {
     meshes: MeshList,
     render_data: RenderData,
     program: *ShaderProgram = undefined,
+    textures_h: [2]ResourceHandle = undefined,
 
     pub fn init(allocator: std.mem.Allocator, renderer: *Renderer) !TestScene {
         Logger.info("initializing test-scene\n", .{});
@@ -63,6 +64,14 @@ pub const TestScene = struct {
             try shader_info.add_sampler(allocator, .global, "my_sampler");
 
             self.program = try self.renderer.create_shader_program(shader_info);
+
+            self.renderer.backend.shader_bind_scope(&self.program.internals, .global, ResourceHandle.zero);
+
+            self.textures_h[0] = try self.renderer.backend.create_texture_image("resources/texture_v1.jpg");
+            self.textures_h[1] = try self.renderer.backend.create_texture_image("resources/texture_v2.jpg");
+
+            self.renderer.backend.shader_set_uniform_sampler(&self.program.internals, self.textures_h[1..2]);
+            try self.renderer.backend.shader_apply_uniform_scope(.global, 0, &self.program.info, &self.program.internals);
         }
 
         return self;
@@ -75,6 +84,10 @@ pub const TestScene = struct {
             self.renderer.backend.free_buffer_h(mesh.vertex_buffer);
             self.renderer.backend.free_buffer_h(mesh.index_buffer);
             self.renderer.backend.free_image(mesh.texture);
+        }
+
+        for (self.textures_h) |texture_h| {
+            self.renderer.backend.free_image(texture_h);
         }
 
         self.meshes.deinit();
@@ -99,7 +112,7 @@ pub const TestScene = struct {
 
         mesh.vertex_buffer = try self.renderer.backend.create_vertex_buffer(mesh.vertices[0..]);
         mesh.index_buffer  = try self.renderer.backend.createIndexBuffer (mesh.indices[0..]);
-        mesh.texture       = try self.renderer.backend.create_texture_image("resources/texture.jpg");
+        mesh.texture       = try self.renderer.backend.create_texture_image("resources/texture_v1.jpg");
 
         return mesh;
     }
@@ -120,7 +133,7 @@ pub const TestScene = struct {
 
         mesh.vertex_buffer = try self.renderer.backend.create_vertex_buffer(mesh.vertices[0..]);
         mesh.index_buffer  = try self.renderer.backend.createIndexBuffer (mesh.indices[0..]);
-        mesh.texture       = try self.renderer.backend.create_texture_image("resources/texture.jpg");
+        mesh.texture       = try self.renderer.backend.create_texture_image("resources/texture_v1.jpg");
 
         return mesh;
     }
@@ -141,7 +154,7 @@ pub const TestScene = struct {
 
         mesh.vertex_buffer = try self.renderer.backend.create_vertex_buffer(mesh.vertices[0..]);
         mesh.index_buffer  = try self.renderer.backend.createIndexBuffer (mesh.indices[0..]);
-        mesh.texture       = try self.renderer.backend.create_texture_image("resources/texture.jpg");
+        mesh.texture       = try self.renderer.backend.create_texture_image("resources/texture_v1.jpg");
 
         return mesh;
     }
