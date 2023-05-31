@@ -98,12 +98,12 @@ pub const VulkanBackend = struct {
     swap_chain_framebuffers: ?[]vk.Framebuffer = null,
 
     command_pool: vk.CommandPool = .null_handle,
+    command_buffers: ?[]vk.CommandBuffer = null,
 
     buffers: BufferList = BufferList{},
     images: ImageArrayList = ImageArrayList{},
     depth_image_handle: ResourceHandle = ResourceHandle.invalid,
 
-    command_buffers: ?[]vk.CommandBuffer = null,
 
     image_available_semaphores: ?[]vk.Semaphore = null,
     render_finished_semaphores: ?[]vk.Semaphore = null,
@@ -956,11 +956,13 @@ pub const VulkanBackend = struct {
         }, self.command_buffers.?.ptr);
     }
 
-    fn record_command_buffer(self: *Self, command_buffer: vk.CommandBuffer, image_index: u32, render_data: *const RenderData, internals: *const ShaderInternals) !void {
+    fn record_command_buffer(self: *Self, command_buffer: vk.CommandBuffer, image_index: u32, render_data: *const RenderData, info: *const ShaderInfo, internals: *ShaderInternals) !void {
         try self.vkd.beginCommandBuffer(command_buffer, &.{
             .flags = .{},
             .p_inheritance_info = null,
         });
+
+        try self.update_shader_uniform_buffer(info, internals);
 
         const clear_values = [_]vk.ClearValue{
             .{ .color = .{ .float_32 = .{ 0, 0, 0, 1 } } },
@@ -1001,6 +1003,7 @@ pub const VulkanBackend = struct {
             // TODO(lm):
             const scope_internals    = internals.get_scope(.global);
             const instance_internals = scope_internals.instances.items[0];
+            _ = instance_internals;
 
             for (render_data.mesh_slice()) |mesh| {
                 const offsets = [_]vk.DeviceSize{0};
@@ -1010,18 +1013,19 @@ pub const VulkanBackend = struct {
 
                 self.vkd.cmdBindVertexBuffers(command_buffer, 0, 1, &vertex_buffers, &offsets);
                 self.vkd.cmdBindIndexBuffer(command_buffer, index_buffer, 0, vk.IndexType.uint16);
-                self.vkd.cmdBindDescriptorSets(
-                    command_buffer,
-                    .graphics,
-                    internals.pipeline.pipeline_layout,
-                    0,
-                    1,
-                    @ptrCast([*]const
-                        vk.DescriptorSet,
-                        &instance_internals.descriptor_sets[self.current_frame]),
-                    0,
-                    undefined
-                );
+
+                // self.vkd.cmdBindDescriptorSets(
+                //     command_buffer,
+                //     .graphics,
+                //     internals.pipeline.pipeline_layout,
+                //     0,
+                //     1,
+                //     @ptrCast([*]const
+                //         vk.DescriptorSet,
+                //         &instance_internals.descriptor_sets[self.current_frame]),
+                //     0,
+                //     undefined
+                // );
 
                 self.vkd.cmdDrawIndexed(command_buffer, index_count, 1, 0, 0, 0);
             }
@@ -1044,7 +1048,7 @@ pub const VulkanBackend = struct {
         }
     }
 
-    pub fn draw_frame(self: *Self, render_data: *const RenderData, info: *const ShaderInfo, internals: *const ShaderInternals) !void {
+    pub fn draw_frame(self: *Self, render_data: *const RenderData, info: *const ShaderInfo, internals: *ShaderInternals) !void {
         _ = try self.vkd.waitForFences(self.device, 1, @ptrCast([*]const vk.Fence, &self.in_flight_fences.?[self.current_frame]), vk.TRUE, std.math.maxInt(u64));
 
         const result = self.vkd.acquireNextImageKHR(self.device, self.swap_chain, std.math.maxInt(u64), self.image_available_semaphores.?[self.current_frame], .null_handle) catch |err| switch (err) {
@@ -1059,13 +1063,10 @@ pub const VulkanBackend = struct {
             return error.ImageAcquireFailed;
         }
 
-        // TODO(lm):
-        try self.update_shader_uniform_buffer(info, internals);
-
         try self.vkd.resetFences(self.device, 1, @ptrCast([*]const vk.Fence, &self.in_flight_fences.?[self.current_frame]));
 
         try self.vkd.resetCommandBuffer(self.command_buffers.?[self.current_frame], .{});
-        try self.record_command_buffer(self.command_buffers.?[self.current_frame], result.image_index, render_data, internals);
+        try self.record_command_buffer(self.command_buffers.?[self.current_frame], result.image_index, render_data, info, internals);
 
         const wait_semaphores = [_]vk.Semaphore{self.image_available_semaphores.?[self.current_frame]};
         const wait_stages = [_]vk.PipelineStageFlags{.{ .color_attachment_output_bit = true }};
@@ -1289,6 +1290,7 @@ pub const VulkanBackend = struct {
                 Logger.warn("DBG-CB: {s}\n", .{p_callback_data.?.p_message});
             } else {
                 Logger.err("DBG-CB: {s}\n", .{p_callback_data.?.p_message});
+                @panic("render-error occurred");
             }
         }
 
@@ -1604,7 +1606,8 @@ pub const VulkanBackend = struct {
         return self.internals.get_mut(internals_h.value).*;
     }
 
-    fn update_shader_uniform_buffer(self: *Self, info: *const ShaderInfo, internals: *const ShaderInternals) !void {
+    // TODO(lm): use actuall instance-idx
+    fn update_shader_uniform_buffer(self: *Self, info: *const ShaderInfo, internals: *ShaderInternals) !void {
         const time: f32 = (@intToFloat(f32, (try std.time.Instant.now()).since(self.start_time)) / @intToFloat(f32, std.time.ns_per_s));
 
         var ubo = UniformBufferObject{
@@ -1614,9 +1617,21 @@ pub const VulkanBackend = struct {
         };
         ubo.proj.data[1][1] *= -1;
 
-        self.shader_set_uniform_buffer(internals, &ubo);
-        // TODO(lm): use actuall instance-idx
-        try self.shader_apply_uniform_scope(.global, 0, info, internals);
+        const instance_h = ResourceHandle.zero;
+
+        // update and bind global scope
+        {
+            self.shader_bind_scope(internals, .global, instance_h);
+            self.shader_set_uniform_buffer(internals, &ubo);
+            try self.shader_apply_uniform_scope(.global, instance_h, info, internals);
+        }
+
+        // update and bind .module scope
+        {
+            self.shader_bind_scope(internals, .module, instance_h);
+            self.shader_set_uniform_buffer(internals, &ubo);
+            try self.shader_apply_uniform_scope(.module, instance_h, info, internals);
+        }
     }
 
     pub fn shader_acquire_instance_resources(self: *const Self, info: *const ShaderInfo, internals: *ShaderInternals, scope: ShaderScope, default_image: ResourceHandle) !void {
@@ -1666,27 +1681,34 @@ pub const VulkanBackend = struct {
         }
     }
 
+    // TODO(lm): think about storing the offset + stride in the instance struct
     // TODO(lm): make value dynamic
     /// update the uniform-buffer at the given location with new data
     pub fn shader_set_uniform_buffer(_: *const Self, internals: *const ShaderInternals, value: *const UniformBufferObject) void {
+        const scope_internals = internals.scopes[@enumToInt(internals.bound_scope)];
+        const start_index = scope_internals.buffer_offset * (internals.bound_instance_h.value + 1);
+        const end_index   = start_index + @sizeOf(UniformBufferObject);
+
+        assert(@sizeOf(UniformBufferObject) < scope_internals.buffer_stride);
+
         @memcpy(
-            internals.mapped_uniform_buffer[0..@sizeOf(UniformBufferObject)],
+            internals.mapped_uniform_buffer[start_index..end_index],
             std.mem.asBytes(value)
         );
     }
 
-    /// upload the data which is currently in the uniform-buffer
+    /// updates and binds the specified descriptor sets
     pub fn shader_apply_uniform_scope(
         self: *Self,
         scope: ShaderScope,
-        instance_idx: usize,
+        instance_h: ResourceHandle,
         info: *const ShaderInfo,
         internals: *const ShaderInternals,
     ) !void
     {
         const scope_info         = &info.scopes[@enumToInt(scope)];
         const scope_internals    = &internals.scopes[@enumToInt(scope)];
-        const instance_internals = &scope_internals.instances.items[instance_idx];
+        const instance_internals = &scope_internals.instances.items[instance_h.value];
         const descriptor_set     = instance_internals.descriptor_sets[self.current_frame];
 
         const buffer_info = [_]vk.DescriptorBufferInfo {.{
@@ -1732,7 +1754,24 @@ pub const VulkanBackend = struct {
             },
         };
 
+        // update descriptor set
         self.vkd.updateDescriptorSets(self.device, descriptor_writes.len, &descriptor_writes, 0, undefined);
+
+        // bind descriptor set
+        const command_buffer = self.command_buffers.?[self.current_frame];
+        const first_set = @intCast(u32, @enumToInt(scope));
+        self.vkd.cmdBindDescriptorSets(
+            command_buffer,
+            .graphics,
+            internals.pipeline.pipeline_layout,
+            first_set,
+            1,
+            @ptrCast([*]const
+                vk.DescriptorSet,
+                &instance_internals.descriptor_sets[self.current_frame]),
+            0,
+            undefined
+        );
     }
 
     // ------------------------------------------

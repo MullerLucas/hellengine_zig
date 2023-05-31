@@ -57,21 +57,36 @@ pub const TestScene = struct {
             shader_info.add_attribute(.r32g32b32_sfloat, 0, 1);
             shader_info.add_attribute(.r32g32_sfloat,    0, 2);
 
-            // try shader_config.add_uniform(allocator, .global, "my_ubo", @sizeOf(render.UniformBufferObject));
             try shader_info.add_uniform(allocator, .global, "model", @sizeOf(za.Mat4));
             try shader_info.add_uniform(allocator, .global, "view",  @sizeOf(za.Mat4));
             try shader_info.add_uniform(allocator, .global, "proj",  @sizeOf(za.Mat4));
             try shader_info.add_sampler(allocator, .global, "my_sampler");
 
+            try shader_info.add_uniform(allocator, .module, "model", @sizeOf(za.Mat4));
+            try shader_info.add_uniform(allocator, .module, "view",  @sizeOf(za.Mat4));
+            try shader_info.add_uniform(allocator, .module, "proj",  @sizeOf(za.Mat4));
+            try shader_info.add_sampler(allocator, .module, "my_sampler");
+
             self.program = try self.renderer.create_shader_program(shader_info);
 
-            self.renderer.backend.shader_bind_scope(&self.program.internals, .global, ResourceHandle.zero);
+            try self.renderer.backend.shader_acquire_instance_resources(&shader_info, &self.program.internals, .global, ResourceHandle.zero);
+            try self.renderer.backend.shader_acquire_instance_resources(&shader_info, &self.program.internals, .module, ResourceHandle.zero);
+        }
 
+        // update shader
+        {
             self.textures_h[0] = try self.renderer.backend.create_texture_image("resources/texture_v1.jpg");
             self.textures_h[1] = try self.renderer.backend.create_texture_image("resources/texture_v2.jpg");
 
+            // update .global textures
+            self.renderer.backend.shader_bind_scope(&self.program.internals, .global, ResourceHandle.zero);
             self.renderer.backend.shader_set_uniform_sampler(&self.program.internals, self.textures_h[1..2]);
-            try self.renderer.backend.shader_apply_uniform_scope(.global, 0, &self.program.info, &self.program.internals);
+            // try self.renderer.backend.shader_apply_uniform_scope(.global, ResourceHandle.zero, &self.program.info, &self.program.internals);
+
+            // update .module textures
+            self.renderer.backend.shader_bind_scope(&self.program.internals, .module, ResourceHandle.zero);
+            self.renderer.backend.shader_set_uniform_sampler(&self.program.internals, self.textures_h[1..2]);
+            // try self.renderer.backend.shader_apply_uniform_scope(.module, ResourceHandle.zero, &self.program.info, &self.program.internals);
         }
 
         return self;

@@ -41,7 +41,7 @@ pub const Renderer = struct {
         self.backend.deinit();
     }
 
-    pub fn draw_frame(self: *Renderer, render_data: *const RenderData, program: *const ShaderProgram) !void {
+    pub fn draw_frame(self: *Renderer, render_data: *const RenderData, program: *ShaderProgram) !void {
         if (self.frame_timer.is_frame_0()) {
             Logger.debug("Timings - frame (us): {}\n", .{self.frame_timer.avg_frame_time_us()});
         }
@@ -66,9 +66,6 @@ pub const Renderer = struct {
         };
 
         try self.backend.create_shader_internals(&info, &program.internals);
-        // TODO(lm): move somewhere else
-        try self.backend.shader_acquire_instance_resources(&info, &program.internals, .global, ResourceHandle { .value = 0 });
-
         return program;
     }
 

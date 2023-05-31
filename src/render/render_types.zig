@@ -12,7 +12,8 @@ const assert = std.debug.assert;
 
 // ----------------------------------------------
 
-pub const UniformBufferObject = struct {
+// TODO(lm): make sure that 'extern' makes sense
+pub const UniformBufferObject = extern struct {
     model: za.Mat4 align(16),
     view: za.Mat4 align(16),
     proj: za.Mat4 align(16),
