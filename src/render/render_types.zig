@@ -13,10 +13,10 @@ const assert = std.debug.assert;
 // ----------------------------------------------
 
 // TODO(lm): make sure that 'extern' makes sense
-pub const UniformBufferObject = extern struct {
+pub const UniformBufferObject = struct {
     model: za.Mat4 align(16),
-    view: za.Mat4 align(16),
-    proj: za.Mat4 align(16),
+    view:  za.Mat4 align(16),
+    proj:  za.Mat4 align(16),
 };
 
 // ----------------------------------------------
@@ -33,29 +33,6 @@ pub const Vertex = struct {
             .input_rate = .vertex,
         };
     }
-
-    // pub fn get_attribute_descriptions() [3]vk.VertexInputAttributeDescription {
-    //     return [_]vk.VertexInputAttributeDescription{
-    //         .{
-    //             .binding = 0,
-    //             .location = 0,
-    //             .format = .r32g32b32_sfloat,
-    //             .offset = @offsetOf(Vertex, "pos"),
-    //         },
-    //         .{
-    //             .binding = 0,
-    //             .location = 1,
-    //             .format = .r32g32b32_sfloat,
-    //             .offset = @offsetOf(Vertex, "color"),
-    //         },
-    //         .{
-    //             .binding = 0,
-    //             .location = 2,
-    //             .format = .r32g32_sfloat,
-    //             .offset = @offsetOf(Vertex, "tex_coord"),
-    //         },
-    //     };
-    // }
 };
 
 // ----------------------------------------------

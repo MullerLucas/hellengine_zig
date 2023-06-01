@@ -1499,13 +1499,21 @@ pub const VulkanBackend = struct {
                 var scope_internals = &internals.scopes[scope_idx];
                 scope_internals.buffer_offset = total_aligned_buffer_size;
 
-                for (scope_info.buffers.items) |buff| {
-                    scope_internals.buffer_size   += buff.size * scope_info.instance_count;
+                // NOTE(lm): buffers is basically one ubo
+                for (scope_info.buffers.as_slice()) |buff| {
+                    scope_internals.buffer_instance_size_unalinged += buff.size;
                 }
 
-                scope_internals.buffer_stride = get_aligned(scope_internals.buffer_size, CFG.vulkan_ubo_alignment);
+                // align buffer-instance-size
+                // NOTE: minUniformBufferOffsetAlignment is the minimum required alignment, in bytes, for the offset member of the VkDescriptorBufferInfo structure for uniform buffers.
+                // When a descriptor of type VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER or VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC is updated,
+                // the offset must be an integer multiple of this limit.
+                // Similarly, dynamic offsets for uniform buffers must be multiples of this limit. The value must be a power of two.
+                while (scope_internals.buffer_instance_size_alinged < scope_internals.buffer_instance_size_unalinged) {
+                    scope_internals.buffer_instance_size_alinged += CFG.vulkan_ubo_alignment;
+                }
 
-                total_aligned_buffer_size += scope_internals.buffer_stride;
+                total_aligned_buffer_size += scope_internals.buffer_instance_size_alinged * scope_info.instance_count;
             }
 
             Logger.debug("total uniform-buffer size: {} byte\n", .{total_aligned_buffer_size});
@@ -1632,6 +1640,13 @@ pub const VulkanBackend = struct {
             self.shader_set_uniform_buffer(internals, &ubo);
             try self.shader_apply_uniform_scope(.module, instance_h, info, internals);
         }
+
+        // update and bind .unit scope
+        {
+            self.shader_bind_scope(internals, .unit, instance_h);
+            self.shader_set_uniform_buffer(internals, &ubo);
+            try self.shader_apply_uniform_scope(.unit, instance_h, info, internals);
+        }
     }
 
     pub fn shader_acquire_instance_resources(self: *const Self, info: *const ShaderInfo, internals: *ShaderInternals, scope: ShaderScope, default_image: ResourceHandle) !void {
@@ -1689,7 +1704,7 @@ pub const VulkanBackend = struct {
         const start_index = scope_internals.buffer_offset * (internals.bound_instance_h.value + 1);
         const end_index   = start_index + @sizeOf(UniformBufferObject);
 
-        assert(@sizeOf(UniformBufferObject) < scope_internals.buffer_stride);
+        assert(@sizeOf(UniformBufferObject) < scope_internals.buffer_instance_size_alinged);
 
         @memcpy(
             internals.mapped_uniform_buffer[start_index..end_index],
@@ -1711,10 +1726,12 @@ pub const VulkanBackend = struct {
         const instance_internals = &scope_internals.instances.items[instance_h.value];
         const descriptor_set     = instance_internals.descriptor_sets[self.current_frame];
 
+        const instance_offset = scope_internals.buffer_offset + (scope_internals.buffer_instance_size_alinged * instance_h.value);
+
         const buffer_info = [_]vk.DescriptorBufferInfo {.{
             .buffer = internals.uniform_buffer.buf,
-            .offset = scope_internals.buffer_offset,
-            .range  = scope_internals.buffer_stride,
+            .offset = instance_offset,
+            .range  = scope_internals.buffer_instance_size_alinged,
         }};
 
         var image_info = DescriptorImageInfoStack {};

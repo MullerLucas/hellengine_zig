@@ -12,6 +12,12 @@ layout(set = 1, binding = 0) uniform ModuleTest {
     mat4 proj;
 } mubo;
 
+layout(set = 2, binding = 0) uniform UnitTest {
+    mat4 model;
+    mat4 view;
+    mat4 proj;
+} uubo;
+
 layout(location = 0) in vec3 inPosition;
 layout(location = 1) in vec3 inColor;
 layout(location = 2) in vec2 inTexCoord;
@@ -21,7 +27,8 @@ layout(location = 1) out vec2 fragTexCoord;
 
 void main() {
     // gl_Position = ubo.proj * ubo.view * ubo.model * vec4(inPosition, 1.0);
-    gl_Position = mubo.proj * mubo.view * mubo.model * vec4(inPosition, 1.0);
+    // gl_Position = mubo.proj * mubo.view * mubo.model * vec4(inPosition, 1.0);
+    gl_Position = uubo.proj * uubo.view * uubo.model * vec4(inPosition, 1.0);
     fragColor = inColor;
     fragTexCoord = inTexCoord;
 }

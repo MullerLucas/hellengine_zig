@@ -175,8 +175,8 @@ pub const ShaderInternals = struct {
 
     attributes: ShaderAttributeArray = .{},
 
-    uniform_buffer:         Buffer = undefined,
-    mapped_uniform_buffer:  []u8   = undefined,
+    uniform_buffer:        Buffer = undefined,
+    mapped_uniform_buffer: []u8   = undefined,
 
     bound_scope: ShaderScope = .global,
     bound_instance_h: ResourceHandle = ResourceHandle.invalid,
@@ -190,8 +190,10 @@ pub const ShaderInternals = struct {
 
 pub const ShaderScopeInternals = struct {
     buffer_offset: usize = 0,
-    buffer_size:   usize = 0,
-    buffer_stride: usize = 0,
+    buffer_size_aligned: usize = 0,
+
+    buffer_instance_size_unalinged: usize = 0,
+    buffer_instance_size_alinged:   usize = 0,
 
     descriptor_set_layout: vk.DescriptorSetLayout = .null_handle,
 

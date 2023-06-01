@@ -99,7 +99,7 @@ pub const ShaderInfo = struct {
         });
     }
 
-    pub fn add_uniform(self: *ShaderInfo, allocator: std.mem.Allocator, scope: ShaderScope, name: []const u8, size: usize) !void {
+    pub fn add_uniform_buffer(self: *ShaderInfo, allocator: std.mem.Allocator, scope: ShaderScope, name: []const u8, size: usize) !void {
         Logger.debug("add uniform-info with scope {}, name {s} and size {}\n", .{scope, name, size});
 
         self.scopes[@enumToInt(scope)].buffers.push(ShaderUniformInfo {
@@ -108,7 +108,7 @@ pub const ShaderInfo = struct {
         });
     }
 
-    pub fn add_sampler(self: *ShaderInfo, allocator: std.mem.Allocator, scope: ShaderScope, name: []const u8) !void {
+    pub fn add_uniform_sampler(self: *ShaderInfo, allocator: std.mem.Allocator, scope: ShaderScope, name: []const u8) !void {
         Logger.debug("add sampler-info with scope {}, name {s}\n", .{scope, name});
 
         self.scopes[@enumToInt(scope)].samplers.push(ShaderSamplerInfo {

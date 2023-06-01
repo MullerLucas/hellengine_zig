@@ -57,20 +57,26 @@ pub const TestScene = struct {
             shader_info.add_attribute(.r32g32b32_sfloat, 0, 1);
             shader_info.add_attribute(.r32g32_sfloat,    0, 2);
 
-            try shader_info.add_uniform(allocator, .global, "model", @sizeOf(za.Mat4));
-            try shader_info.add_uniform(allocator, .global, "view",  @sizeOf(za.Mat4));
-            try shader_info.add_uniform(allocator, .global, "proj",  @sizeOf(za.Mat4));
-            try shader_info.add_sampler(allocator, .global, "my_sampler");
+            try shader_info.add_uniform_buffer (allocator, .global, "model", @sizeOf(za.Mat4));
+            try shader_info.add_uniform_buffer (allocator, .global, "view",  @sizeOf(za.Mat4));
+            try shader_info.add_uniform_buffer (allocator, .global, "proj",  @sizeOf(za.Mat4));
+            try shader_info.add_uniform_sampler(allocator, .global, "my_sampler");
 
-            try shader_info.add_uniform(allocator, .module, "model", @sizeOf(za.Mat4));
-            try shader_info.add_uniform(allocator, .module, "view",  @sizeOf(za.Mat4));
-            try shader_info.add_uniform(allocator, .module, "proj",  @sizeOf(za.Mat4));
-            try shader_info.add_sampler(allocator, .module, "my_sampler");
+            try shader_info.add_uniform_buffer (allocator, .module, "model", @sizeOf(za.Mat4));
+            try shader_info.add_uniform_buffer (allocator, .module, "view",  @sizeOf(za.Mat4));
+            try shader_info.add_uniform_buffer (allocator, .module, "proj",  @sizeOf(za.Mat4));
+            try shader_info.add_uniform_sampler(allocator, .module, "my_sampler");
+
+            try shader_info.add_uniform_buffer (allocator, .unit, "model", @sizeOf(za.Mat4));
+            try shader_info.add_uniform_buffer (allocator, .unit, "view",  @sizeOf(za.Mat4));
+            try shader_info.add_uniform_buffer (allocator, .unit, "proj",  @sizeOf(za.Mat4));
+            try shader_info.add_uniform_sampler(allocator, .unit, "my_sampler");
 
             self.program = try self.renderer.create_shader_program(shader_info);
 
             try self.renderer.backend.shader_acquire_instance_resources(&shader_info, &self.program.internals, .global, ResourceHandle.zero);
             try self.renderer.backend.shader_acquire_instance_resources(&shader_info, &self.program.internals, .module, ResourceHandle.zero);
+            try self.renderer.backend.shader_acquire_instance_resources(&shader_info, &self.program.internals, .unit,   ResourceHandle.zero);
         }
 
         // update shader
@@ -86,7 +92,10 @@ pub const TestScene = struct {
             // update .module textures
             self.renderer.backend.shader_bind_scope(&self.program.internals, .module, ResourceHandle.zero);
             self.renderer.backend.shader_set_uniform_sampler(&self.program.internals, self.textures_h[1..2]);
-            // try self.renderer.backend.shader_apply_uniform_scope(.module, ResourceHandle.zero, &self.program.info, &self.program.internals);
+
+            // update .unit textures
+            self.renderer.backend.shader_bind_scope(&self.program.internals, .unit, ResourceHandle.zero);
+            self.renderer.backend.shader_set_uniform_sampler(&self.program.internals, self.textures_h[1..2]);
         }
 
         return self;
