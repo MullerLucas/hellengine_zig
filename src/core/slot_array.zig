@@ -5,8 +5,8 @@ pub fn SlotArray(comptime T: type, comptime array_capacity: usize) type {
         const Self = @This();
         const capacity = array_capacity;
 
-        data:    [capacity]T    = undefined,
-        is_free: [capacity]bool = [_]bool { true } ** capacity,
+        items_raw: [capacity]T    = undefined,
+        is_free:   [capacity]bool = [_]bool { true } ** capacity,
 
         fn find_first_free_slot(self: *const Self) usize {
             var idx: usize = 0;
@@ -24,7 +24,7 @@ pub fn SlotArray(comptime T: type, comptime array_capacity: usize) type {
             assert(free_slot < capacity);
 
             self.is_free[free_slot] = false;
-            self.data[free_slot] = value;
+            self.items_raw[free_slot] = value;
 
             return free_slot;
         }
@@ -36,17 +36,17 @@ pub fn SlotArray(comptime T: type, comptime array_capacity: usize) type {
 
         pub fn get(self: *const Self, idx: usize) T {
             assert(!self.is_free[idx]);
-            return self.data[idx];
+            return self.items_raw[idx];
         }
 
         pub fn get_ref(self: *const Self, idx: usize) *const T {
             assert(!self.is_free[idx]);
-            return &self.data[idx];
+            return &self.items_raw[idx];
         }
 
         pub fn get_mut(self: *Self, idx: usize) *T {
             assert(!self.is_free[idx]);
-            return &self.data[idx];
+            return &self.items_raw[idx];
         }
 
         pub fn to_string(self: *const Self) [capacity*2]u8 {

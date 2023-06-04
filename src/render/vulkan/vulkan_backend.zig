@@ -1002,7 +1002,7 @@ pub const VulkanBackend = struct {
 
             // TODO(lm):
             const scope_internals    = internals.get_scope(.global);
-            const instance_internals = scope_internals.instances.items[0];
+            const instance_internals = scope_internals.instances.get(0);
             _ = instance_internals;
 
             for (render_data.mesh_slice()) |mesh| {
@@ -1578,7 +1578,7 @@ pub const VulkanBackend = struct {
                 const layout_info = vk.DescriptorSetLayoutCreateInfo {
                     .flags         = .{},
                     .binding_count = @intCast(u32, bindings.len),
-                    .p_bindings    = if (bindings.is_empty()) null else &bindings.items,
+                    .p_bindings    = if (bindings.is_empty()) null else &bindings.items_raw,
                 };
 
                 scope_internals.descriptor_set_layout = try self.vkd.createDescriptorSetLayout(self.device, &layout_info, null);
@@ -1656,7 +1656,7 @@ pub const VulkanBackend = struct {
         Logger.debug("acquire instance resources for scope {} and instance {}\n", .{scope, scope_internals.instances.len});
 
         scope_internals.instances.push(ShaderInstanceInternals{});
-        var instance_internals = &scope_internals.instances.items[scope_internals.instances.len - 1];
+        var instance_internals = scope_internals.instances.get_mut(scope_internals.instances.len - 1);
 
         // set all textures to the default texture
         // TODO(lm): actually use default-texture
@@ -1689,7 +1689,7 @@ pub const VulkanBackend = struct {
         assert(images_h.len <= CFG.max_uniform_samplers_per_instance);
 
         const scope_internals    = &internals.scopes[@enumToInt(internals.bound_scope)];
-        const instance_internals = &scope_internals.instances.items[internals.bound_instance_h.value];
+        const instance_internals = scope_internals.instances.get_mut(internals.bound_instance_h.value);
 
         for (images_h, 0..) |image_h, idx| {
             instance_internals.sampler_images[idx] = image_h;
@@ -1723,7 +1723,7 @@ pub const VulkanBackend = struct {
     {
         const scope_info         = &info.scopes[@enumToInt(scope)];
         const scope_internals    = &internals.scopes[@enumToInt(scope)];
-        const instance_internals = &scope_internals.instances.items[instance_h.value];
+        const instance_internals = scope_internals.instances.get(instance_h.value);
         const descriptor_set     = instance_internals.descriptor_sets[self.current_frame];
 
         const instance_offset = scope_internals.buffer_offset + (scope_internals.buffer_instance_size_alinged * instance_h.value);
@@ -1766,7 +1766,7 @@ pub const VulkanBackend = struct {
                 .descriptor_type = .combined_image_sampler,
                 .descriptor_count = 1,
                 .p_buffer_info = undefined,
-                .p_image_info = &image_info.items,
+                .p_image_info = &image_info.items_raw,
                 .p_texel_buffer_view = undefined,
             },
         };
