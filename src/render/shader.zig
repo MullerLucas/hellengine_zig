@@ -33,10 +33,10 @@ pub const ShaderAttributeInfoArray = core.StackArray(ShaderAttributeInfo, config
 // ----------------------------------------------
 
 pub const ShaderScope = enum(usize) {
-    global = 0,
-    module = 1,
-    unit   = 2,
-    local  = 3,
+    global        = 0,
+    module        = 1,
+    unit          = 2,
+    local         = 3,
 };
 
 // ----------------------------------------------

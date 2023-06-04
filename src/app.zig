@@ -24,7 +24,7 @@ pub const TestScene = struct {
     meshes: MeshList,
     render_data: RenderData,
     program: *ShaderProgram = undefined,
-    textures_h: [2]ResourceHandle = undefined,
+    textures_h: [4]ResourceHandle = undefined,
 
     pub fn init(allocator: std.mem.Allocator, renderer: *Renderer) !TestScene {
         Logger.info("initializing test-scene\n", .{});
@@ -72,21 +72,29 @@ pub const TestScene = struct {
             try shader_info.add_uniform_buffer (allocator, .unit, "proj",  @sizeOf(za.Mat4));
             try shader_info.add_uniform_sampler(allocator, .unit, "my_sampler");
 
+            try shader_info.add_uniform_buffer (allocator, .local, "model", @sizeOf(za.Mat4));
+            try shader_info.add_uniform_buffer (allocator, .local, "view",  @sizeOf(za.Mat4));
+            try shader_info.add_uniform_buffer (allocator, .local, "proj",  @sizeOf(za.Mat4));
+            try shader_info.add_uniform_sampler(allocator, .local, "my_sampler");
+
             self.program = try self.renderer.create_shader_program(shader_info);
 
             try self.renderer.backend.shader_acquire_instance_resources(&shader_info, &self.program.internals, .global, ResourceHandle.zero);
             try self.renderer.backend.shader_acquire_instance_resources(&shader_info, &self.program.internals, .module, ResourceHandle.zero);
             try self.renderer.backend.shader_acquire_instance_resources(&shader_info, &self.program.internals, .unit,   ResourceHandle.zero);
+            try self.renderer.backend.shader_acquire_instance_resources(&shader_info, &self.program.internals, .local,  ResourceHandle.zero);
         }
 
         // update shader
         {
             self.textures_h[0] = try self.renderer.backend.create_texture_image("resources/texture_v1.jpg");
             self.textures_h[1] = try self.renderer.backend.create_texture_image("resources/texture_v2.jpg");
+            self.textures_h[2] = try self.renderer.backend.create_texture_image("resources/texture_v3.jpg");
+            self.textures_h[3] = try self.renderer.backend.create_texture_image("resources/texture_v4.jpg");
 
             // update .global textures
             self.renderer.backend.shader_bind_scope(&self.program.internals, .global, ResourceHandle.zero);
-            self.renderer.backend.shader_set_uniform_sampler(&self.program.internals, self.textures_h[1..2]);
+            self.renderer.backend.shader_set_uniform_sampler(&self.program.internals, self.textures_h[0..1]);
             // try self.renderer.backend.shader_apply_uniform_scope(.global, ResourceHandle.zero, &self.program.info, &self.program.internals);
 
             // update .module textures
@@ -95,7 +103,11 @@ pub const TestScene = struct {
 
             // update .unit textures
             self.renderer.backend.shader_bind_scope(&self.program.internals, .unit, ResourceHandle.zero);
-            self.renderer.backend.shader_set_uniform_sampler(&self.program.internals, self.textures_h[1..2]);
+            self.renderer.backend.shader_set_uniform_sampler(&self.program.internals, self.textures_h[2..3]);
+
+            // update .local textures
+            self.renderer.backend.shader_bind_scope(&self.program.internals, .local, ResourceHandle.zero);
+            self.renderer.backend.shader_set_uniform_sampler(&self.program.internals, self.textures_h[3..4]);
         }
 
         return self;

@@ -28,4 +28,6 @@ pub fn Range(comptime T: type) type {
     };
 }
 
+pub const MemRange = Range(usize);
+
 // ----------------------------------------------------------------------------

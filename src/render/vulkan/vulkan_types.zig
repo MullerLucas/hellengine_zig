@@ -5,6 +5,7 @@ const core   = @import("../../core/core.zig");
 const ResourceHandle = core.ResourceHandle;
 const render = @import("../render.zig");
 const ShaderScope = render.shader.ShaderScope;
+const MemRange = core.MemRange;
 
 // ----------------------------------------------
 
@@ -173,11 +174,18 @@ pub const ShaderInternals = struct {
     pipeline: GraphicsPipeline = .{},
     descriptor_pool: vk.DescriptorPool = .null_handle,
 
+    push_constant_internals: PushConstantInternalsStack = .{},
+
     attributes: ShaderAttributeArray = .{},
 
-    uniform_buffer:        Buffer = undefined,
-    mapped_uniform_buffer: []u8   = undefined,
+    /// used for all scopes except 'local'
+    uniform_buffer:         Buffer = undefined,
+    uniform_buffer_mapping: []u8   = undefined,
+    /// used for 'local' scope only
+    storage_buffer:         Buffer = undefined,
+    storage_buffer_mapping: []u8   = undefined,
 
+    bound_buffer: *Buffer = undefined,
     bound_scope: ShaderScope = .global,
     bound_instance_h: ResourceHandle = ResourceHandle.invalid,
 
@@ -191,7 +199,13 @@ pub const ShaderInternals = struct {
 pub const ShaderScopeInternals = struct {
     buffer_offset: usize = 0,
     buffer_size_aligned: usize = 0,
+    buffer_descriptor_type: vk.DescriptorType = undefined,
 
+    // NOTE: minUniformBufferOffsetAlignment is the minimum required alignment, in bytes, for the offset member of the VkDescriptorBufferInfo structure for uniform buffers.
+    // When a descriptor of type VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER or VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC is updated,
+    // the offset must be an integer multiple of this limit.
+    // Similarly, dynamic offsets for uniform buffers must be multiples of this limit. The value must be a power of two.
+    // NOTE: minStorageBufferOffsetAlignment ...
     buffer_instance_size_unalinged: usize = 0,
     buffer_instance_size_alinged:   usize = 0,
 
@@ -207,3 +221,14 @@ pub const ShaderInstanceInternals = struct {
     sampler_images:  [CFG.max_uniform_samplers_per_shader]ResourceHandle = [_]ResourceHandle { ResourceHandle.invalid } ** CFG.max_uniform_samplers_per_instance,
     descriptor_sets: [CFG.MAX_FRAMES_IN_FLIGHT]vk.DescriptorSet = [_]vk.DescriptorSet { .null_handle } ** CFG.MAX_FRAMES_IN_FLIGHT,
 };
+
+// ----------------------------------------------
+
+pub const PushConstantInternals = struct {
+    // Spec: Both offset and size are in units of bytes and must be a multiple of 4
+    range: MemRange,
+};
+
+pub const PushConstantInternalsStack = core.StackArray(PushConstantInternals, CFG.vulkan_push_constant_stack_limit);
+
+// ----------------------------------------------
