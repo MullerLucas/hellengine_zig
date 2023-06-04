@@ -20,7 +20,8 @@ pub const shader_storage_buffer_descriptor_limit = 1024;
 
 pub const shader_descriptor_set_limit = 1024;
 
-pub const shader_instance_limit = 1024;
+pub const shader_unit_instance_limit = 1024;
+pub const shader_local_instance_limit = 100000;
 
 // NOTE: spec only guarantees 128 bytes with 4-byte alignment
 pub const vulkan_push_constant_range_limit = 128;
@@ -30,6 +31,7 @@ pub const vulkan_push_constant_stack_limit = 16;
 
 // required by some nvidia cards?
 // TODO(lm): s->required_ubo_alignment = context->device.properties.limits.minUniformBufferOffsetAlignment;
+// pub const vulkan_ubo_alignment = 256;
 pub const vulkan_ubo_alignment = 256;
 
 

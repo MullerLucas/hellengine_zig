@@ -71,8 +71,8 @@ pub const ShaderInfo = struct {
     scopes: [4]ShaderScopeInfo = [_]ShaderScopeInfo {
         .{ .instance_count = 1 },
         .{ .instance_count = 1 },
-        .{ .instance_count = config.shader_instance_limit },
-        .{ .instance_count = 1 },
+        .{ .instance_count = config.shader_unit_instance_limit },
+        .{ .instance_count = config.shader_local_instance_limit },
     },
 
     pub fn deinit(self: *ShaderInfo) void {

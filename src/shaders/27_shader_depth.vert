@@ -1,26 +1,10 @@
 #version 450
 
-layout(set = 0, binding = 0) uniform UniformBufferObject {
-    mat4 model;
-    mat4 view;
-    mat4 proj;
-} ubo;
-
-// ----------------------------------------------
-
-layout(set = 1, binding = 0) uniform ModuleTest {
-    mat4 model;
-    mat4 view;
-    mat4 proj;
-} mubo;
-
-// ----------------------------------------------
-
-layout(set = 2, binding = 0) uniform UnitTest {
-    mat4 model;
-    mat4 view;
-    mat4 proj;
-} uubo;
+// layout(set = 0, binding = 0) uniform UniformBufferObject {
+//     mat4 model;
+//     mat4 view;
+//     mat4 proj;
+// } ubo;
 
 // ----------------------------------------------
 
@@ -28,6 +12,7 @@ struct LocalUbo {
     mat4 model;
     mat4 view;
     mat4 proj;
+    mat4 reserved_0;
 };
 
 // std140 enforces cpp memory layout
@@ -51,10 +36,8 @@ layout(location = 1) out vec2 fragTexCoord;
 
 void main() {
     // gl_Position = ubo.proj * ubo.view * ubo.model * vec4(inPosition, 1.0);
-    // gl_Position = mubo.proj * mubo.view * mubo.model * vec4(inPosition, 1.0);
-    // gl_Position = uubo.proj * uubo.view * uubo.model * vec4(inPosition, 1.0);
 
-    LocalUbo lubo = local_storage.data[0];
+    LocalUbo lubo = local_storage.data[push_constants.local_idx];
     gl_Position = lubo.proj * lubo.view * lubo.model * vec4(inPosition, 1.0);
 
     fragColor = inColor;

@@ -194,5 +194,46 @@ pub const TestScene = struct {
 
         return mesh;
     }
+
+    // fn update_shader_uniform_buffer(self: *TestScene, info: *const ShaderInfo) !void {
+    //     const time: f32 = (@intToFloat(f32, (try std.time.Instant.now()).since(self.start_time)) / @intToFloat(f32, std.time.ns_per_s));
+    //
+    //     var ubo = UniformBufferObject {
+    //         .model = za.Mat4.identity().rotate(time * 90.0, za.Vec3.new(0.0, 0.0, 1.0)),
+    //         .view = za.lookAt(za.Vec3.new(2, 2, 2), za.Vec3.new(0, 0, 0), za.Vec3.new(0, 0, 1)),
+    //         .proj = za.perspective(45.0, @intToFloat(f32, self.swap_chain_extent.width) / @intToFloat(f32, self.swap_chain_extent.height), 0.1, 10),
+    //     };
+    //     ubo.proj.data[1][1] *= -1;
+    //
+    //     const instance_h = ResourceHandle.zero;
+    //
+    //     // update and bind global scope
+    //     {
+    //         self.shader_bind_scope(internals, .global, instance_h);
+    //         self.shader_set_uniform_buffer(UniformBufferObject, internals, &ubo);
+    //         try self.shader_apply_uniform_scope(.global, instance_h, info, internals);
+    //     }
+    //
+    //     // update and bind .module scope
+    //     {
+    //         self.shader_bind_scope(internals, .module, instance_h);
+    //         self.shader_set_uniform_buffer(UniformBufferObject, internals, &ubo);
+    //         try self.shader_apply_uniform_scope(.module, instance_h, info, internals);
+    //     }
+    //
+    //     // update and bind .unit scope
+    //     {
+    //         self.shader_bind_scope(internals, .unit, instance_h);
+    //         self.shader_set_uniform_buffer(UniformBufferObject, internals, &ubo);
+    //         try self.shader_apply_uniform_scope(.unit, instance_h, info, internals);
+    //     }
+    //
+    //     // update and bind .local scope
+    //     {
+    //         self.shader_bind_scope(internals, .local, instance_h);
+    //         self.shader_set_uniform_buffer(UniformBufferObject, internals, &ubo);
+    //         try self.shader_apply_uniform_scope(.local, instance_h, info, internals);
+    //     }
+    // }
 };
 

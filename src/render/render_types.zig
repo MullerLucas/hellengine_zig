@@ -17,6 +17,7 @@ pub const UniformBufferObject = struct {
     model: za.Mat4 align(16),
     view:  za.Mat4 align(16),
     proj:  za.Mat4 align(16),
+    reserved_0: za.Mat4 align(16) = undefined,
 };
 
 // ----------------------------------------------

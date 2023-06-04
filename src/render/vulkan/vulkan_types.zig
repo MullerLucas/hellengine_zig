@@ -182,9 +182,11 @@ pub const ShaderInternals = struct {
     /// used for all scopes except 'local'
     uniform_buffer:         Buffer = undefined,
     uniform_buffer_mapping: []u8   = undefined,
+    uniform_buffer_total_size_aligned: usize = 0,
     /// used for 'local' scope only
     storage_buffer:         Buffer = undefined,
     storage_buffer_mapping: []u8   = undefined,
+    storage_buffer_total_size_aligned: usize = 0,
 
     bound_buffer: *Buffer = undefined,
     bound_scope: ShaderScope = .global,
