@@ -1029,7 +1029,7 @@ pub const VulkanBackend = struct {
             const instance_internals = scope_internals.instances.get(0);
             _ = instance_internals;
 
-            for (render_data.mesh_slice()) |mesh| {
+            for (render_data.mesh_slice(), 0..) |mesh, idx| {
                 const offsets = [_]vk.DeviceSize{0};
                 const vertex_buffers = [_]vk.Buffer{self.get_buffer(mesh.vertex_buffer).buf};
                 const index_buffer = self.get_buffer(mesh.index_buffer).buf;
@@ -1037,6 +1037,8 @@ pub const VulkanBackend = struct {
 
                 self.vkd.cmdBindVertexBuffers(command_buffer, 0, 1, &vertex_buffers, &offsets);
                 self.vkd.cmdBindIndexBuffer(command_buffer, index_buffer, 0, vk.IndexType.uint16);
+
+                self.shader_set_local_idx(internals, idx);
 
                 // self.vkd.cmdBindDescriptorSets(
                 //     command_buffer,
@@ -1443,16 +1445,6 @@ pub const VulkanBackend = struct {
             .p_dynamic_states = &dynamic_states,
         };
 
-        // push constants
-        // let mut push_constants: DynArray<vk::PushConstantRange, {config::VULKAN_SHADER_MAX_PUSH_CONSTANTS}> = DynArray::default();
-        // for pcr in push_constant_infos {
-        //     push_constants.push(vk::PushConstantRange::builder()
-        //         .offset(pcr.range.offset as u32)
-        //         .size(pcr.range.range as u32)
-        //         .stage_flags(vk::ShaderStageFlags::ALL_GRAPHICS) // TODO: make selectable
-        //         .build())
-        // }
-
         var push_constant_ranges = PushConstantRangeStack{};
         for (push_constant_internals) |pci| {
             push_constant_ranges.push(vk.PushConstantRange {
@@ -1460,7 +1452,7 @@ pub const VulkanBackend = struct {
                 .size   = @intCast(u32, pci.range.size),
                 // TODO(lm): make selectable
                 .stage_flags = .{
-                    // .all_graphics_bit = true,  // NOTE(lm): not working *shrug*
+                    // .all_graphics = true,   // NOTE(lm): not working *shrug*
                     .vertex_bit = true,
                     .fragment_bit = true,
                 },
@@ -1869,7 +1861,7 @@ pub const VulkanBackend = struct {
             });
         }
 
-        const descriptor_writes = [_]vk.WriteDescriptorSet{
+        var descriptor_writes = [_]vk.WriteDescriptorSet{
             .{
                 .dst_set = descriptor_set,
                 .dst_binding = 0,
@@ -1909,6 +1901,21 @@ pub const VulkanBackend = struct {
                 &instance_internals.descriptor_sets[self.current_frame]),
             0,
             undefined
+        );
+    }
+
+    fn shader_set_local_idx(self: *const Self, internals: *ShaderInternals, value: usize) void {
+        const command_buffer = self.command_buffers.?[self.current_frame];
+        // TODO(lm): don't hard-code index
+        const push_constant = internals.push_constant_internals.get(0);
+
+        self.vkd.cmdPushConstants(
+            command_buffer,
+            internals.pipeline.pipeline_layout,
+            vk.ShaderStageFlags { .vertex_bit = true, .fragment_bit = true,},   // TODO(lm): use all-graphics bit
+            @intCast(u32, push_constant.range.offset),
+            @intCast(u32, push_constant.range.size),
+            &value,
         );
     }
 
