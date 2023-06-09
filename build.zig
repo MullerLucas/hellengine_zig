@@ -11,7 +11,7 @@ pub fn build(b: *std.Build) !void {
     const optimize = b.standardOptimizeOption(.{});
 
     const exe = b.addExecutable(.{
-        .name = "hellengine",
+        .name = "grid_game",
         .root_source_file = .{ .path = "src/main.zig" },
         .target = target,
         .optimize = optimize,
@@ -26,8 +26,8 @@ pub fn build(b: *std.Build) !void {
         &[_][]const u8 { "glslc", "--target-env=vulkan1.2" },
         "-o",
     );
-    shaders.add("vert_27", "src/shaders/27_shader_depth.vert", .{});
-    shaders.add("frag_27", "src/shaders/27_shader_depth.frag", .{});
+    shaders.add("vert_27", "src/engine/shaders/27_shader_depth.vert", .{});
+    shaders.add("frag_27", "src/engine/shaders/27_shader_depth.frag", .{});
     exe.addModule("resources", shaders.getModule());
 
 

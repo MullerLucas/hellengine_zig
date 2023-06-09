@@ -1,15 +1,12 @@
 const std = @import("std");
 
 
-const config = @import("config.zig");
-
-const core   = @import("./core/core.zig");
+const engine = @import("engine/engine.zig");
+const core = engine.core;
 const Logger = core.log.scoped(.app);
+const Renderer = engine.render.Renderer;
 
-const render   = @import("render/render.zig");
-const Renderer = render.Renderer;
-
-const GlfwWindow = @import("GlfwWindow.zig");
+const GlfwWindow = engine.GlfwWindow;
 
 const app       = @import("app.zig");
 const TestScene = app.TestScene;
@@ -26,7 +23,7 @@ pub fn main() !void {
     }
     const allocator = gpa.allocator();
 
-    var window = try GlfwWindow.init(config.WIDTH, config.HEIGHT, config.APP_NAME);
+    var window = try GlfwWindow.init(engine.config.WIDTH, engine.config.HEIGHT, engine.config.APP_NAME);
     defer window.deinit();
 
     var renderer = Renderer.init(allocator, &window) catch |err| {

@@ -1,13 +1,14 @@
 const std = @import("std");
 
-const render     = @import("./render/render.zig");
+const engine     = @import("engine/engine.zig");
+const render     = engine.render;
 const Renderer   = render.Renderer;
 const Mesh       = render.Mesh;
 const MeshList   = render.MeshList;
 const RenderData = render.RenderData;
 const Vertex     = render.Vertex;
 
-const core   = @import("./core/core.zig");
+const core   = engine.core;
 const Logger = core.log.scoped(.app);
 const ResourceHandle = core.ResourceHandle;
 
