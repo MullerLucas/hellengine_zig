@@ -48,6 +48,9 @@ const validation_layers = [_][*:0]const u8{"VK_LAYER_KHRONOS_validation"};
 const device_extensions = [_][*:0]const u8{vk.extension_info.khr_swapchain.name};
 const BUFFER_BINDING_IDX = 0;
 const IMAGE_SAMPLER_BINDING_IDX = 1;
+const UNIFORM_SCOPES = [_]ShaderScope { .global, .material };
+const STORAGE_SCOPES = [_]ShaderScope { .scene };
+const PUSH_CONSTANT_SCOPES = [_]ShaderScope { .object };
 
 // ----------------------------------------------
 
@@ -116,7 +119,7 @@ pub const VulkanBackend = struct {
             .window = window,
         };
 
-        try self.createInstance();
+        try self.create_instance();
         try self.setup_debug_messenger();
         try self.create_surface();
         try self.pick_physical_device();
@@ -226,7 +229,7 @@ pub const VulkanBackend = struct {
         try self.create_framebuffers();
     }
 
-    fn createInstance(self: *Self) !void {
+    fn create_instance(self: *Self) !void {
         const vk_proc = @ptrCast(*const fn (instance: vk.Instance, procname: [*:0]const u8) callconv(.C) vk.PfnVoidFunction, &GlfwWindow.get_instance_proc_address);
         self.vkb = try vulkan.BaseDispatch.load(vk_proc);
 
@@ -1019,7 +1022,7 @@ pub const VulkanBackend = struct {
                 self.vkd.cmdBindVertexBuffers(command_buffer, 0, 1, &vertex_buffers, &offsets);
                 self.vkd.cmdBindIndexBuffer(command_buffer, index_buffer, 0, vk.IndexType.uint16);
 
-                self.shader_set_local_idx(internals, idx);
+                self.shader_set_object_idx(internals, idx);
 
                 // self.vkd.cmdBindDescriptorSets(
                 //     command_buffer,
@@ -1517,10 +1520,12 @@ pub const VulkanBackend = struct {
             }
         }
 
+        // TODO(lm): compress uniform- and storage-buffer creation
         // create uniform-buffer
         {
-            // iterate all scopes except 'local'
-            for (0..3) |scope_idx| {
+            for (UNIFORM_SCOPES) |scopes| {
+                const scope_idx = @enumToInt(scopes);
+
                 const scope_info = info.scopes[scope_idx];
                 var scope_internals = &internals.scopes[scope_idx];
                 scope_internals.buffer_offset = internals.uniform_buffer_total_size_aligned;
@@ -1540,32 +1545,37 @@ pub const VulkanBackend = struct {
 
             Logger.debug("total uniform-buffer size: {} byte\n", .{internals.uniform_buffer_total_size_aligned});
 
-            const buffer_h                   = try self.create_uniform_buffer(internals.uniform_buffer_total_size_aligned);
-            internals.uniform_buffer         = self.get_buffer(buffer_h);
-            internals.uniform_buffer_mapping = @ptrCast([*]u8,
-                try self.vkd.mapMemory(self.device, internals.uniform_buffer.mem, 0, internals.uniform_buffer_total_size_aligned, .{}),
-            )[0..internals.uniform_buffer_total_size_aligned];
+            if (internals.uniform_buffer_total_size_aligned > 0) {
+                const buffer_h                   = try self.create_uniform_buffer(internals.uniform_buffer_total_size_aligned);
+                internals.uniform_buffer         = self.get_buffer(buffer_h);
+                internals.uniform_buffer_mapping = @ptrCast([*]u8,
+                    try self.vkd.mapMemory(self.device, internals.uniform_buffer.mem, 0, internals.uniform_buffer_total_size_aligned, .{}),
+                )[0..internals.uniform_buffer_total_size_aligned];
+            }
         }
 
         // create storage-buffer
         {
-            const scope_idx = @enumToInt(ShaderScope.local);
+            for (STORAGE_SCOPES) |scope| {
+                const scope_idx = @enumToInt(scope);
+                const scope_info    = info.scopes[scope_idx];
+                var scope_internals = &internals.scopes[scope_idx];
 
-            const scope_info    = info.scopes[scope_idx];
-            var scope_internals = &internals.scopes[scope_idx];
+                scope_internals.buffer_offset = internals.storage_buffer_total_size_aligned;
+                scope_internals.buffer_descriptor_type = .storage_buffer;
 
-            scope_internals.buffer_descriptor_type = .storage_buffer;
+                for (scope_info.buffers.as_slice()) |buff| {
+                    scope_internals.buffer_instance_size_unalinged += buff.size;
+                }
 
-            for (scope_info.buffers.as_slice()) |buff| {
-                scope_internals.buffer_instance_size_unalinged += buff.size;
+                // align buffer-instance-size
+                while (scope_internals.buffer_instance_size_alinged < scope_internals.buffer_instance_size_unalinged) {
+                    scope_internals.buffer_instance_size_alinged += CFG.vulkan_ubo_alignment;
+                }
+
+                internals.storage_buffer_total_size_aligned = scope_internals.buffer_instance_size_alinged * scope_info.instance_count;
             }
 
-            // align buffer-instance-size
-            while (scope_internals.buffer_instance_size_alinged < scope_internals.buffer_instance_size_unalinged) {
-                scope_internals.buffer_instance_size_alinged += CFG.vulkan_ubo_alignment;
-            }
-
-            internals.storage_buffer_total_size_aligned = scope_internals.buffer_instance_size_alinged * scope_info.instance_count;
 
             Logger.debug("total storage-buffer size: {} byte\n", .{internals.storage_buffer_total_size_aligned});
 
@@ -1590,10 +1600,11 @@ pub const VulkanBackend = struct {
                 var scope_internals = &internals.scopes[idx];
 
                 if (!scope_info.buffers.is_empty()) {
-                    if (idx != @enumToInt(ShaderScope.local)) {
+                    // TODO(lm): make configurable
+                    if (idx != @enumToInt(ShaderScope.scene) and idx != @enumToInt(ShaderScope.object)) {
                         Logger.debug("add uniform-buffer to scope {} at binding {}\n", .{idx, BUFFER_BINDING_IDX});
 
-                        // use uniform-buffers for non-local scopes
+                        // use uniform-buffers for non-object scopes
                         bindings.push(.{
                             .binding = BUFFER_BINDING_IDX,
                             .descriptor_count = 1,
@@ -1605,7 +1616,7 @@ pub const VulkanBackend = struct {
                     else {
                         Logger.debug("add storage-buffer to scope {} at binding {}\n", .{idx, BUFFER_BINDING_IDX});
 
-                        // use storage-buffers for local scope
+                        // use storage-buffers for object scope
                         bindings.push(.{
                             .binding = BUFFER_BINDING_IDX,
                             .descriptor_count = 1,
@@ -1628,7 +1639,7 @@ pub const VulkanBackend = struct {
                 }
 
                 // NOTE(lm): when there are no bindings, we are still creating an empty set, so that we don't have to use dynamic set indices
-                //           -> set 0 is always 'global', set 3 is always 'local'
+                //           -> set 0 is always 'global', set 3 is always 'object'
                 const layout_info = vk.DescriptorSetLayoutCreateInfo {
                     .flags         = .{},
                     .binding_count = @intCast(u32, bindings.len),
@@ -1641,15 +1652,19 @@ pub const VulkanBackend = struct {
 
         // add push constants
         {
-            Logger.debug("add local push constant\n", .{});
+            for (PUSH_CONSTANT_SCOPES) |scope| {
+                const scope_idx = @enumToInt(scope);
+                const scope_info = &info.scopes[scope_idx];
 
-            var scope_internals = &info.scopes[@enumToInt(ShaderScope.local)]; if (!scope_internals.buffers.is_empty()) {
-                // local_idx: usize
-                const size_unaligned = @sizeOf(usize);
-                const range = core.utils.get_aligned_range(0, size_unaligned, CFG.vulkan_push_constant_alignment);
-                internals.push_constant_internals.push(.{
-                    .range = range,
-                });
+                for (scope_info.buffers.as_slice()) |scope_buffer| {
+                    Logger.debug("add push constant '{s}' with size '{}' to scope '{}'\n", .{scope_buffer.name.data.items, scope_buffer.size, scope});
+
+
+                    const range = core.utils.get_aligned_range(0, scope_buffer.size, CFG.vulkan_push_constant_alignment);
+                    internals.push_constant_internals.push(.{
+                        .range = range,
+                    });
+                }
             }
         }
 
@@ -1708,14 +1723,20 @@ pub const VulkanBackend = struct {
 
         const instance_h = ResourceHandle.zero;
 
-        // update and bind .local scope
+        // update and bind .objcet scope
         {
-            self.shader_bind_scope(internals, .local, instance_h);
+            self.shader_bind_scope(internals, .scene, instance_h);
             self.shader_set_uniform_buffer(UniformBufferObject, info, internals, &ubos);
-            try self.shader_apply_uniform_scope(.local, instance_h, info, internals);
+            try self.shader_apply_uniform_scope(.scene, instance_h, info, internals);
+        }
+
+        // bind material scope (sampler)
+        {
+            try self.shader_apply_uniform_scope(.material, instance_h, info, internals);
         }
     }
 
+    // TODO(lm): think about what happens when this function is used at local scope
     pub fn shader_acquire_instance_resources(self: *const Self, info: *const ShaderInfo, internals: *ShaderInternals, scope: ShaderScope, default_image: ResourceHandle) !void {
         const scope_info    = &info.scopes[@enumToInt(scope)];
         var scope_internals = &internals.scopes[@enumToInt(scope)];
@@ -1774,8 +1795,7 @@ pub const VulkanBackend = struct {
         const buffer_mapping = if (scope_internals.buffer_descriptor_type == .uniform_buffer) internals.uniform_buffer_mapping
                                else internals.storage_buffer_mapping;
 
-        assert(
-        value.len < info.scopes[@enumToInt(internals.bound_scope)].instance_count);
+        assert(value.len < info.scopes[@enumToInt(internals.bound_scope)].instance_count);
         assert(@sizeOf(T) == scope_internals.buffer_instance_size_alinged);
 
         @memcpy(
@@ -1879,7 +1899,7 @@ pub const VulkanBackend = struct {
         );
     }
 
-    fn shader_set_local_idx(self: *const Self, internals: *ShaderInternals, value: usize) void {
+    fn shader_set_object_idx(self: *const Self, internals: *ShaderInternals, value: usize) void {
         const command_buffer = self.command_buffers.?[self.current_frame];
         // TODO(lm): don't hard-code index
         const push_constant = internals.push_constant_internals.get(0);

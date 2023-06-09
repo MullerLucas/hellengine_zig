@@ -8,7 +8,7 @@
 
 // ----------------------------------------------
 
-struct LocalUbo {
+struct SceneData {
     mat4 model;
     mat4 view;
     mat4 proj;
@@ -16,12 +16,12 @@ struct LocalUbo {
 };
 
 // std140 enforces cpp memory layout
-layout(std140, set = 3, binding = 0) readonly buffer LocalStorage {
-    LocalUbo data[];
-} local_storage;
+layout(std140, set = 1, binding = 0) readonly buffer SceneStorage {
+    SceneData data[];
+} scene_storage;
 
 layout(push_constant) uniform PushConstants {
-    uint local_idx;
+    uint object_idx;
 } push_constants;
 
 
@@ -37,8 +37,8 @@ layout(location = 1) out vec2 fragTexCoord;
 void main() {
     // gl_Position = ubo.proj * ubo.view * ubo.model * vec4(inPosition, 1.0);
 
-    LocalUbo lubo = local_storage.data[push_constants.local_idx];
-    gl_Position = lubo.proj * lubo.view * lubo.model * vec4(inPosition, 1.0);
+    SceneData scene_data = scene_storage.data[push_constants.object_idx];
+    gl_Position = scene_data.proj * scene_data.view * scene_data.model * vec4(inPosition, 1.0);
 
     fragColor = inColor;
     fragTexCoord = inTexCoord;

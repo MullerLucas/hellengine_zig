@@ -33,10 +33,10 @@ pub const ShaderAttributeInfoArray = core.StackArray(ShaderAttributeInfo, config
 // ----------------------------------------------
 
 pub const ShaderScope = enum(usize) {
-    global        = 0,
-    module        = 1,
-    unit          = 2,
-    local         = 3,
+    global   = 0,
+    scene    = 1,
+    material = 2,
+    object   = 3,
 };
 
 // ----------------------------------------------
@@ -70,9 +70,9 @@ pub const ShaderInfo = struct {
     attributes: ShaderAttributeInfoArray  = .{},
     scopes: [4]ShaderScopeInfo = [_]ShaderScopeInfo {
         .{ .instance_count = 1 },
+        .{ .instance_count = config.shader_scene_instance_limit },
+        .{ .instance_count = config.shader_material_instance_limit },
         .{ .instance_count = 1 },
-        .{ .instance_count = config.shader_unit_instance_limit },
-        .{ .instance_count = config.shader_local_instance_limit },
     },
 
     pub fn deinit(self: *ShaderInfo) void {

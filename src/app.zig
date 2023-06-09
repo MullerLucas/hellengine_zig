@@ -62,27 +62,24 @@ pub const TestScene = struct {
             try shader_info.add_uniform_buffer (allocator, .global, "proj",  @sizeOf(za.Mat4));
             try shader_info.add_uniform_sampler(allocator, .global, "my_sampler");
 
-            try shader_info.add_uniform_buffer (allocator, .module, "model", @sizeOf(za.Mat4));
-            try shader_info.add_uniform_buffer (allocator, .module, "view",  @sizeOf(za.Mat4));
-            try shader_info.add_uniform_buffer (allocator, .module, "proj",  @sizeOf(za.Mat4));
-            try shader_info.add_uniform_sampler(allocator, .module, "my_sampler");
+            try shader_info.add_uniform_buffer (allocator, .scene, "model", @sizeOf(za.Mat4));
+            try shader_info.add_uniform_buffer (allocator, .scene, "view",  @sizeOf(za.Mat4));
+            try shader_info.add_uniform_buffer (allocator, .scene, "proj",  @sizeOf(za.Mat4));
+            try shader_info.add_uniform_sampler(allocator, .scene, "my_sampler");
 
-            try shader_info.add_uniform_buffer (allocator, .unit, "model", @sizeOf(za.Mat4));
-            try shader_info.add_uniform_buffer (allocator, .unit, "view",  @sizeOf(za.Mat4));
-            try shader_info.add_uniform_buffer (allocator, .unit, "proj",  @sizeOf(za.Mat4));
-            try shader_info.add_uniform_sampler(allocator, .unit, "my_sampler");
+            try shader_info.add_uniform_buffer (allocator, .material, "model", @sizeOf(za.Mat4));
+            try shader_info.add_uniform_buffer (allocator, .material, "view",  @sizeOf(za.Mat4));
+            try shader_info.add_uniform_buffer (allocator, .material, "proj",  @sizeOf(za.Mat4));
+            try shader_info.add_uniform_sampler(allocator, .material, "my_sampler");
 
-            try shader_info.add_uniform_buffer (allocator, .local, "model", @sizeOf(za.Mat4));
-            try shader_info.add_uniform_buffer (allocator, .local, "view",  @sizeOf(za.Mat4));
-            try shader_info.add_uniform_buffer (allocator, .local, "proj",  @sizeOf(za.Mat4));
-            try shader_info.add_uniform_sampler(allocator, .local, "my_sampler");
+            try shader_info.add_uniform_buffer(allocator, .object, "local_idx", @sizeOf(usize));
 
             self.program = try self.renderer.create_shader_program(shader_info);
 
-            try self.renderer.backend.shader_acquire_instance_resources(&shader_info, &self.program.internals, .global, ResourceHandle.zero);
-            try self.renderer.backend.shader_acquire_instance_resources(&shader_info, &self.program.internals, .module, ResourceHandle.zero);
-            try self.renderer.backend.shader_acquire_instance_resources(&shader_info, &self.program.internals, .unit,   ResourceHandle.zero);
-            try self.renderer.backend.shader_acquire_instance_resources(&shader_info, &self.program.internals, .local,  ResourceHandle.zero);
+            try self.renderer.backend.shader_acquire_instance_resources(&shader_info, &self.program.internals, .global,   ResourceHandle.zero);
+            try self.renderer.backend.shader_acquire_instance_resources(&shader_info, &self.program.internals, .scene,    ResourceHandle.zero);
+            try self.renderer.backend.shader_acquire_instance_resources(&shader_info, &self.program.internals, .material, ResourceHandle.zero);
+            try self.renderer.backend.shader_acquire_instance_resources(&shader_info, &self.program.internals, .object,   ResourceHandle.zero);
         }
 
         // update shader
@@ -95,18 +92,17 @@ pub const TestScene = struct {
             // update .global textures
             self.renderer.backend.shader_bind_scope(&self.program.internals, .global, ResourceHandle.zero);
             self.renderer.backend.shader_set_uniform_sampler(&self.program.internals, self.textures_h[0..1]);
-            // try self.renderer.backend.shader_apply_uniform_scope(.global, ResourceHandle.zero, &self.program.info, &self.program.internals);
 
             // update .module textures
-            self.renderer.backend.shader_bind_scope(&self.program.internals, .module, ResourceHandle.zero);
+            self.renderer.backend.shader_bind_scope(&self.program.internals, .scene, ResourceHandle.zero);
             self.renderer.backend.shader_set_uniform_sampler(&self.program.internals, self.textures_h[1..2]);
 
             // update .unit textures
-            self.renderer.backend.shader_bind_scope(&self.program.internals, .unit, ResourceHandle.zero);
+            self.renderer.backend.shader_bind_scope(&self.program.internals, .material, ResourceHandle.zero);
             self.renderer.backend.shader_set_uniform_sampler(&self.program.internals, self.textures_h[2..3]);
 
-            // update .local textures
-            self.renderer.backend.shader_bind_scope(&self.program.internals, .local, ResourceHandle.zero);
+            // update .object textures
+            self.renderer.backend.shader_bind_scope(&self.program.internals, .object, ResourceHandle.zero);
             self.renderer.backend.shader_set_uniform_sampler(&self.program.internals, self.textures_h[3..4]);
         }
 
@@ -194,46 +190,5 @@ pub const TestScene = struct {
 
         return mesh;
     }
-
-    // fn update_shader_uniform_buffer(self: *TestScene, info: *const ShaderInfo) !void {
-    //     const time: f32 = (@intToFloat(f32, (try std.time.Instant.now()).since(self.start_time)) / @intToFloat(f32, std.time.ns_per_s));
-    //
-    //     var ubo = UniformBufferObject {
-    //         .model = za.Mat4.identity().rotate(time * 90.0, za.Vec3.new(0.0, 0.0, 1.0)),
-    //         .view = za.lookAt(za.Vec3.new(2, 2, 2), za.Vec3.new(0, 0, 0), za.Vec3.new(0, 0, 1)),
-    //         .proj = za.perspective(45.0, @intToFloat(f32, self.swap_chain_extent.width) / @intToFloat(f32, self.swap_chain_extent.height), 0.1, 10),
-    //     };
-    //     ubo.proj.data[1][1] *= -1;
-    //
-    //     const instance_h = ResourceHandle.zero;
-    //
-    //     // update and bind global scope
-    //     {
-    //         self.shader_bind_scope(internals, .global, instance_h);
-    //         self.shader_set_uniform_buffer(UniformBufferObject, internals, &ubo);
-    //         try self.shader_apply_uniform_scope(.global, instance_h, info, internals);
-    //     }
-    //
-    //     // update and bind .module scope
-    //     {
-    //         self.shader_bind_scope(internals, .module, instance_h);
-    //         self.shader_set_uniform_buffer(UniformBufferObject, internals, &ubo);
-    //         try self.shader_apply_uniform_scope(.module, instance_h, info, internals);
-    //     }
-    //
-    //     // update and bind .unit scope
-    //     {
-    //         self.shader_bind_scope(internals, .unit, instance_h);
-    //         self.shader_set_uniform_buffer(UniformBufferObject, internals, &ubo);
-    //         try self.shader_apply_uniform_scope(.unit, instance_h, info, internals);
-    //     }
-    //
-    //     // update and bind .local scope
-    //     {
-    //         self.shader_bind_scope(internals, .local, instance_h);
-    //         self.shader_set_uniform_buffer(UniformBufferObject, internals, &ubo);
-    //         try self.shader_apply_uniform_scope(.local, instance_h, info, internals);
-    //     }
-    // }
 };
 
