@@ -11,6 +11,8 @@ const GlfwWindow = engine.GlfwWindow;
 const app       = @import("app.zig");
 const TestScene = app.TestScene;
 
+const resources = @import("engine/resources/resources.zig");
+
 // ----------------------------------------------
 
 pub fn main() !void {
@@ -21,7 +23,15 @@ pub fn main() !void {
         const leaked = gpa.deinit();
         if (leaked == .leak) std.log.err("MemLeak", .{});
     }
-    const allocator = gpa.allocator();
+    var allocator = gpa.allocator();
+
+    const obj_file = try std.fs.cwd().openFile("art/simple_box.obj", .{});
+    defer obj_file.close();
+
+    var reader = std.io.bufferedReader(obj_file.reader());
+    var mesh = try resources.obj_file_loader.parse_obj_file(allocator, reader.reader());
+    defer mesh.deinit();
+    Logger.info("Mesh: {}\n", .{mesh});
 
     var window = try GlfwWindow.init(engine.config.WIDTH, engine.config.HEIGHT, engine.config.APP_NAME);
     defer window.deinit();
