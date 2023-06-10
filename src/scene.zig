@@ -21,11 +21,12 @@ const za = @import("zalgebra");
 // ----------------------------------------------g
 
 pub const TestScene = struct {
-    renderer: *Renderer,
-    meshes: MeshList,
-    render_data: RenderData,
-    program: *ShaderProgram = undefined,
+    const mesh_limit: usize = 1024;
+
+    renderer:   *Renderer,
+    program:    *ShaderProgram    = undefined,
     textures_h: [4]ResourceHandle = undefined,
+    meshes_h:   [1]ResourceHandle = undefined,
 
     pub fn init(allocator: std.mem.Allocator, renderer: *Renderer) !TestScene {
         Logger.info("initializing test-scene\n", .{});
@@ -35,28 +36,24 @@ pub const TestScene = struct {
 
         var self = TestScene {
             .renderer    = renderer,
-            .meshes      = try MeshList.initCapacity(allocator, 3),
-            .render_data = RenderData {},
         };
 
-        // create render-data
+        // create meshes
         {
-            try self.meshes.append(try self.createQuadMesh1());
-            try self.meshes.append(try self.createQuadMesh2());
-            try self.meshes.append(try self.createQuadMesh3());
-
-            self.render_data = RenderData {};
-            self.render_data.add_mesh(&self.meshes.items[0]);
-            self.render_data.add_mesh(&self.meshes.items[1]);
-            self.render_data.add_mesh(&self.meshes.items[2]);
+            self.meshes_h[0] = try self.renderer.create_mesh_from_file("art/simple_box.obj", "resources/texture.jpg");
         }
 
         // create shader-program
         {
             var shader_info = ShaderInfo { };
+            // position
             shader_info.add_attribute(.r32g32b32_sfloat, 0, 0);
+            // normal
             shader_info.add_attribute(.r32g32b32_sfloat, 0, 1);
-            shader_info.add_attribute(.r32g32_sfloat,    0, 2);
+            // color
+            shader_info.add_attribute(.r32g32b32_sfloat, 0, 2);
+            // uv
+            shader_info.add_attribute(.r32g32_sfloat,    0, 3);
 
             try shader_info.add_uniform_buffer (allocator, .global, "model", @sizeOf(za.Mat4));
             try shader_info.add_uniform_buffer (allocator, .global, "view",  @sizeOf(za.Mat4));
@@ -113,83 +110,21 @@ pub const TestScene = struct {
     pub fn deinit(self: *TestScene) void {
         Logger.info("deinitializing test-scene\n", .{});
 
-        for (self.meshes.items) |mesh| {
-            self.renderer.backend.free_buffer_h(mesh.vertex_buffer);
-            self.renderer.backend.free_buffer_h(mesh.index_buffer);
-            self.renderer.backend.free_image(mesh.texture);
+        for (self.meshes_h) |mesh_h| {
+            self.renderer.deinit_mesh(mesh_h);
         }
 
         for (self.textures_h) |texture_h| {
+            // TODO(lm): go through renderer, not backend
             self.renderer.backend.free_image(texture_h);
         }
-
-        self.meshes.deinit();
 
         self.renderer.destroy_shader_program(self.program);
         self.program = undefined;
     }
 
-    pub fn createQuadMesh1(self: *TestScene) !Mesh {
-        var mesh = Mesh {
-            .vertices = [_]Vertex {
-                .{ .pos = .{ -0.5, -0.5, 0.0 }, .color = .{ 1, 0, 0 }, .tex_coord = .{ 0, 0 } },
-                .{ .pos = .{ 0.5, -0.5, 0.0 }, .color = .{ 0, 1, 0 }, .tex_coord = .{ 1, 0 } },
-                .{ .pos = .{ 0.5, 0.5, 0.0 }, .color = .{ 0, 0, 1 }, .tex_coord = .{ 1, 1 } },
-                .{ .pos = .{ -0.5, 0.5, 0.0 }, .color = .{ 1, 1, 1 }, .tex_coord = .{ 0, 1 } },
-            },
-
-            .indices = [_]u16 {
-                0, 1, 2, 2, 3, 0, //
-            },
-        };
-
-        mesh.vertex_buffer = try self.renderer.backend.create_vertex_buffer(mesh.vertices[0..]);
-        mesh.index_buffer  = try self.renderer.backend.createIndexBuffer (mesh.indices[0..]);
-        mesh.texture       = try self.renderer.backend.create_texture_image("resources/texture_v1.jpg");
-
-        return mesh;
-    }
-
-   pub fn createQuadMesh2(self: *TestScene) !Mesh {
-        var mesh = Mesh {
-            .vertices = [_]Vertex {
-                .{ .pos = .{ -0.5, -0.5, -0.5 }, .color = .{ 1, 0, 0 }, .tex_coord = .{ 0, 0 } },
-                .{ .pos = .{ 0.5, -0.5, -0.5 }, .color = .{ 0, 1, 0 }, .tex_coord = .{ 1, 0 } },
-                .{ .pos = .{ 0.5, 0.5, -0.5 }, .color = .{ 0, 0, 1 }, .tex_coord = .{ 1, 1 } },
-                .{ .pos = .{ -0.5, 0.5, -0.5 }, .color = .{ 1, 1, 1 }, .tex_coord = .{ 0, 1 } },
-            },
-
-            .indices = [_]u16 {
-                0, 1, 2, 2, 3, 0, //
-            },
-        };
-
-        mesh.vertex_buffer = try self.renderer.backend.create_vertex_buffer(mesh.vertices[0..]);
-        mesh.index_buffer  = try self.renderer.backend.createIndexBuffer (mesh.indices[0..]);
-        mesh.texture       = try self.renderer.backend.create_texture_image("resources/texture_v1.jpg");
-
-        return mesh;
-    }
-
-   pub fn createQuadMesh3(self: *TestScene) !Mesh {
-        var mesh = Mesh {
-            .vertices = [_]Vertex {
-                .{ .pos = .{ -0.75, -0.75, -0.75 }, .color = .{ 1, 0, 0 }, .tex_coord = .{ 0, 0 } },
-                .{ .pos = .{ 0.75, -0.75, -0.75 }, .color = .{ 0, 1, 0 }, .tex_coord = .{ 1, 0 } },
-                .{ .pos = .{ 0.75, 0.75, -0.75 }, .color = .{ 0, 0, 1 }, .tex_coord = .{ 1, 1 } },
-                .{ .pos = .{ -0.75, 0.75, -0.75 }, .color = .{ 1, 1, 1 }, .tex_coord = .{ 0, 1 } },
-            },
-
-            .indices = [_]u16 {
-                0, 1, 2, 2, 3, 0, //
-            },
-        };
-
-        mesh.vertex_buffer = try self.renderer.backend.create_vertex_buffer(mesh.vertices[0..]);
-        mesh.index_buffer  = try self.renderer.backend.createIndexBuffer (mesh.indices[0..]);
-        mesh.texture       = try self.renderer.backend.create_texture_image("resources/texture_v1.jpg");
-
-        return mesh;
+    pub fn render_scene(self: *const TestScene) !void {
+        try self.renderer.draw_meshes(self.meshes_h[0..], self.program);
     }
 };
 

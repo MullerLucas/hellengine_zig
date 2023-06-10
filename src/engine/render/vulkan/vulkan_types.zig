@@ -235,3 +235,9 @@ pub const PushConstantInternals = struct {
 pub const PushConstantInternalsStack = core.StackArray(PushConstantInternals, CFG.vulkan_push_constant_stack_limit);
 
 // ----------------------------------------------
+
+pub const MeshInternals = struct {
+    vertex_buffer: ResourceHandle = ResourceHandle.invalid,
+    index_buffer:  ResourceHandle = ResourceHandle.invalid,
+    texture:       ResourceHandle = ResourceHandle.invalid,
+};

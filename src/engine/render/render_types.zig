@@ -4,6 +4,9 @@ const za  = @import("zalgebra");
 const core_types = @import("../core/core_types.zig");
 const ResourceHandle = core_types.ResourceHandle;
 
+const engine = @import("../../engine/engine.zig");
+const Mesh = engine.resources.Mesh;
+
 const core = @import("../core/core.zig");
 const config = @import("../config.zig");
 const Logger = core.log.scoped(.render);
@@ -22,49 +25,9 @@ pub const UniformBufferObject = struct {
 
 // ----------------------------------------------
 
-pub const Vertex = struct {
-    pos:       [3]f32 = .{ 0, 0, 0 },
-    color:     [3]f32 = .{ 0, 0, 0 },
-    tex_coord: [2]f32 = .{ 0, 0 },
-
-    pub fn get_binding_description() vk.VertexInputBindingDescription {
-        return vk.VertexInputBindingDescription{
-            .binding = 0,
-            .stride = @sizeOf(Vertex),
-            .input_rate = .vertex,
-        };
-    }
-};
-
-// ----------------------------------------------
-
-pub const Mesh = struct {
-    vertices: [4]Vertex,
-    indices : [6]u16,
-    vertex_buffer: ResourceHandle = ResourceHandle.invalid,
-    index_buffer:  ResourceHandle = ResourceHandle.invalid,
-    texture:       ResourceHandle = ResourceHandle.invalid,
-};
-
-pub const MeshList = std.ArrayList(Mesh);
-
-// ----------------------------------------------
-
 pub const RenderData = struct {
-    pub const DATA_LIMIT: usize = 1024;
-    len: usize = 0,
-    meshes: [DATA_LIMIT]*Mesh = undefined,
-
-    pub fn add_mesh(self: *RenderData, mesh: *Mesh) void {
-        assert(self.len < RenderData.DATA_LIMIT);
-
-        self.meshes[self.len] = mesh;
-        self.len += 1;
-    }
-
-    pub fn mesh_slice(self: *const RenderData) []const *const Mesh {
-        return self.meshes[0..self.len];
-    }
+    pub const mesh_limit: usize = 1024;
+    meshes: core.StackArray(*const Mesh, mesh_limit) = .{},
 };
 
 // ----------------------------------------------

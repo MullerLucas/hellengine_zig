@@ -15,8 +15,9 @@ const SlotArray      = core.SlotArray;
 const ResourceHandle = core.ResourceHandle;
 const MemRange       = core.MemRange;
 
-const render              = @import("../render.zig");
-const Vertex              = render.Vertex;
+const engine = @import("../../engine.zig");
+
+const render              = engine.render;
 const RenderData          = render.RenderData;
 const UniformBufferObject = render.UniformBufferObject;
 const ShaderInfo        = render.ShaderInfo;
@@ -36,6 +37,10 @@ const ShaderScope = render.shader.ShaderScope;
 const ShaderScopeInternals = vulkan.ShaderInternals;
 const ShaderInstanceInternals = vulkan.ShaderInstanceInternals;
 const PushConstantInternals = vulkan.PushConstantInternals;
+
+const Vertex        = engine.resources.Vertex;
+const Mesh          = engine.resources.Mesh;
+const MeshInternals = vulkan.resources.MeshInternals;
 
 
 const c = @cImport({
@@ -791,8 +796,8 @@ pub const VulkanBackend = struct {
         return vertex_buffer_handle;
     }
 
-    pub fn createIndexBuffer(self: *Self, indices: []const u16) !ResourceHandle {
-        const buffer_size: vk.DeviceSize = @sizeOf(u16) * indices.len;
+    pub fn create_index_buffer(self: *Self, indices: []const Mesh.IndexType) !ResourceHandle {
+        const buffer_size: vk.DeviceSize = @sizeOf(Mesh.IndexType) * indices.len;
         Logger.debug("creating index-buffer of size: {}\n", .{buffer_size});
 
         const staging_buffer_handle = try create_buffer(self, buffer_size, .{ .transfer_src_bit = true }, .{ .host_visible_bit = true, .host_coherent_bit = true });
@@ -1013,29 +1018,17 @@ pub const VulkanBackend = struct {
             const instance_internals = scope_internals.instances.get(0);
             _ = instance_internals;
 
-            for (render_data.mesh_slice(), 0..) |mesh, idx| {
+
+            for (render_data.meshes.as_slice(), 0..) |mesh, idx| {
                 const offsets = [_]vk.DeviceSize{0};
-                const vertex_buffers = [_]vk.Buffer{self.get_buffer(mesh.vertex_buffer).buf};
-                const index_buffer = self.get_buffer(mesh.index_buffer).buf;
+                const vertex_buffers = [_]vk.Buffer {self.get_buffer(mesh.internals.vertex_buffer).buf};
+                const index_buffer = self.get_buffer(mesh.internals.index_buffer).buf;
                 const index_count = @intCast(u32, mesh.indices.len);
 
                 self.vkd.cmdBindVertexBuffers(command_buffer, 0, 1, &vertex_buffers, &offsets);
-                self.vkd.cmdBindIndexBuffer(command_buffer, index_buffer, 0, vk.IndexType.uint16);
+                self.vkd.cmdBindIndexBuffer  (command_buffer, index_buffer, 0, to_vk_index_type(Mesh.IndexType));
 
                 self.shader_set_object_idx(internals, idx);
-
-                // self.vkd.cmdBindDescriptorSets(
-                //     command_buffer,
-                //     .graphics,
-                //     internals.pipeline.pipeline_layout,
-                //     0,
-                //     1,
-                //     @ptrCast([*]const
-                //         vk.DescriptorSet,
-                //         &instance_internals.descriptor_sets[self.current_frame]),
-                //     0,
-                //     undefined
-                // );
 
                 self.vkd.cmdDrawIndexed(command_buffer, index_count, 1, 0, 0, 0);
             }
@@ -1058,7 +1051,7 @@ pub const VulkanBackend = struct {
         }
     }
 
-    pub fn draw_frame(self: *Self, render_data: *const RenderData, info: *const ShaderInfo, internals: *ShaderInternals) !void {
+    pub fn draw_render_data(self: *Self, render_data: *const RenderData, info: *const ShaderInfo, internals: *ShaderInternals) !void {
         _ = try self.vkd.waitForFences(self.device, 1, @ptrCast([*]const vk.Fence, &self.in_flight_fences.?[self.current_frame]), vk.TRUE, std.math.maxInt(u64));
 
         const result = self.vkd.acquireNextImageKHR(self.device, self.swap_chain, std.math.maxInt(u64), self.image_available_semaphores.?[self.current_frame], .null_handle) catch |err| switch (err) {
@@ -1370,7 +1363,8 @@ pub const VulkanBackend = struct {
             .depth_clamp_enable = vk.FALSE,
             .rasterizer_discard_enable = vk.FALSE,
             .polygon_mode = .fill,
-            .cull_mode = .{ .back_bit = true },
+            // @Hack: uncomment
+            .cull_mode = .{}, //.{ .back_bit = true },
             .front_face = .counter_clockwise,
             .depth_bias_enable = vk.FALSE,
             .depth_bias_constant_factor = 0,
@@ -1915,4 +1909,31 @@ pub const VulkanBackend = struct {
     }
 
     // ------------------------------------------
+
+    pub fn create_mesh_internals(self: *Self, mesh: *Mesh, texture_path: [*:0]const u8) !void {
+        mesh.internals.vertex_buffer = try self.create_vertex_buffer(mesh.vertices[0..]);
+        mesh.internals.index_buffer  = try self.create_index_buffer (mesh.indices[0..]);
+        mesh.internals.texture       = try self.create_texture_image(texture_path);
+    }
+
+    pub fn deinit_mesh_internals(self: *Self, mesh: *Mesh) void {
+        self.free_buffer_h(mesh.internals.vertex_buffer);
+        self.free_buffer_h(mesh.internals.index_buffer);
+        self.free_image   (mesh.internals.texture);
+
+        mesh.internals = undefined;
+    }
+
+    // ------------------------------------------
 };
+
+
+
+pub fn to_vk_index_type(comptime T: type) vk.IndexType {
+    switch (T) {
+        u8 => return .uint8,
+        u16 => return .uint16,
+        u32 => return .uint32,
+        else => @compileError("Invalid index type"),
+    }
+}
