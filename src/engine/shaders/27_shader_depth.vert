@@ -1,18 +1,19 @@
 #version 450
 
-// layout(set = 0, binding = 0) uniform UniformBufferObject {
-//     mat4 model;
-//     mat4 view;
-//     mat4 proj;
-// } ubo;
+layout(set = 0, binding = 0) uniform GlobalData {
+    mat4 view;
+    mat4 proj;
+    mat4 reserved_0;
+    mat4 reserved_1;
+} global_data;
 
 // ----------------------------------------------
 
 struct SceneData {
     mat4 model;
-    mat4 view;
-    mat4 proj;
     mat4 reserved_0;
+    mat4 reserved_1;
+    mat4 reserved_2;
 };
 
 // std140 enforces cpp memory layout
@@ -36,10 +37,8 @@ layout(location = 0) out vec3 fragColor;
 layout(location = 1) out vec2 fragTexCoord;
 
 void main() {
-    // gl_Position = ubo.proj * ubo.view * ubo.model * vec4(inPosition, 1.0);
-
     SceneData scene_data = scene_storage.data[push_constants.object_idx];
-    gl_Position = scene_data.proj * scene_data.view * scene_data.model * vec4(inPosition, 1.0);
+    gl_Position = global_data.proj * global_data.view * scene_data.model * vec4(inPosition, 1.0);
 
     fragColor = inColor;
     fragTexCoord = inTexCoord;

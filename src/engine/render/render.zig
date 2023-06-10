@@ -2,7 +2,8 @@ pub const vulkan   = @import("vulkan/vulkan.zig");
 pub const Renderer = @import("renderer.zig").Renderer;
 
 const render_types            = @import("render_types.zig");
-pub const UniformBufferObject = render_types.UniformBufferObject;
+pub const SceneShaderData = render_types.SceneShaderData;
+pub const GlobalShaderData = render_types.GlobalShaderData;
 pub const RenderData          = render_types.RenderData;
 pub const NumberFormat        = render_types.NumberFormat;
 

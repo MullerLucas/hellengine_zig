@@ -19,7 +19,6 @@ const engine = @import("../../engine.zig");
 
 const render              = engine.render;
 const RenderData          = render.RenderData;
-const UniformBufferObject = render.UniformBufferObject;
 const ShaderInfo        = render.ShaderInfo;
 
 const vulkan     = @import("./vulkan.zig");
@@ -1594,7 +1593,7 @@ pub const VulkanBackend = struct {
                 var scope_internals = &internals.scopes[idx];
 
                 if (!scope_info.buffers.is_empty()) {
-                    // TODO(lm): make configurable
+                    // @Todo: make configurable
                     if (idx != @enumToInt(ShaderScope.scene) and idx != @enumToInt(ShaderScope.object)) {
                         Logger.debug("add uniform-buffer to scope {} at binding {}\n", .{idx, BUFFER_BINDING_IDX});
 
@@ -1706,21 +1705,32 @@ pub const VulkanBackend = struct {
     fn update_shader_uniform_buffer(self: *Self, info: *const ShaderInfo, internals: *ShaderInternals) !void {
         const time: f32 = (@intToFloat(f32, (try std.time.Instant.now()).since(self.start_time)) / @intToFloat(f32, std.time.ns_per_s));
 
-        var ubo = UniformBufferObject {
-            .model = za.Mat4.identity().rotate(time * 90.0, za.Vec3.new(0.0, 0.0, 1.0)),
+        var global_data = render.GlobalShaderData {
             .view = za.lookAt(za.Vec3.new(2, 2, 2), za.Vec3.new(0, 0, 0), za.Vec3.new(0, 0, 1)),
             .proj = za.perspective(45.0, @intToFloat(f32, self.swap_chain_extent.width) / @intToFloat(f32, self.swap_chain_extent.height), 0.1, 10),
         };
-        ubo.proj.data[1][1] *= -1;
+        global_data.proj.data[1][1] *= -1;
 
-        const ubos = [_]UniformBufferObject { ubo, ubo, ubo };
+        var scene_data = render.SceneShaderData {
+            .model = za.Mat4.identity().rotate(time * 90.0, za.Vec3.new(0.0, 0.0, 1.0)),
+        };
+
+        const all_global_data = [_]render.GlobalShaderData { global_data };
+        const all_scene_data = [_]render.SceneShaderData { scene_data, scene_data, scene_data };
 
         const instance_h = ResourceHandle.zero;
 
-        // update and bind .objcet scope
+        // update and bind .global scope
+        {
+            self.shader_bind_scope(internals, .global, instance_h);
+            self.shader_set_uniform_buffer(render.GlobalShaderData, info, internals, &all_global_data);
+            try self.shader_apply_uniform_scope(.global, instance_h, info, internals);
+        }
+
+        // update and bind .scene scope
         {
             self.shader_bind_scope(internals, .scene, instance_h);
-            self.shader_set_uniform_buffer(UniformBufferObject, info, internals, &ubos);
+            self.shader_set_uniform_buffer(render.SceneShaderData, info, internals, &all_scene_data);
             try self.shader_apply_uniform_scope(.scene, instance_h, info, internals);
         }
 
@@ -1731,7 +1741,7 @@ pub const VulkanBackend = struct {
     }
 
     // TODO(lm): think about what happens when this function is used at local scope
-    pub fn shader_acquire_instance_resources(self: *const Self, info: *const ShaderInfo, internals: *ShaderInternals, scope: ShaderScope, default_image: ResourceHandle) !void {
+    pub fn shader_acquire_instance_resources(self: *const Self, info: *const ShaderInfo, internals: *ShaderInternals, scope: ShaderScope, default_image: ResourceHandle) !ResourceHandle {
         const scope_info    = &info.scopes[@enumToInt(scope)];
         var scope_internals = &internals.scopes[@enumToInt(scope)];
 
@@ -1741,7 +1751,6 @@ pub const VulkanBackend = struct {
         var instance_internals = scope_internals.instances.get_mut(scope_internals.instances.len - 1);
 
         // set all textures to the default texture
-        // TODO(lm): actually use default-texture
         for (0..scope_info.samplers.len) |idx| {
             instance_internals.sampler_images[idx] = default_image;
         }
@@ -1756,6 +1765,8 @@ pub const VulkanBackend = struct {
         };
 
         try self.vkd.allocateDescriptorSets(self.device, &alloc_info, &instance_internals.descriptor_sets);
+
+        return ResourceHandle { .value = scope_internals.instances.len - 1 };
     }
 
     pub fn shader_bind_scope(_: *Self, internals: *ShaderInternals, scope: ShaderScope, instance_h: ResourceHandle) void {
@@ -1789,7 +1800,7 @@ pub const VulkanBackend = struct {
         const buffer_mapping = if (scope_internals.buffer_descriptor_type == .uniform_buffer) internals.uniform_buffer_mapping
                                else internals.storage_buffer_mapping;
 
-        assert(value.len < info.scopes[@enumToInt(internals.bound_scope)].instance_count);
+        assert(value.len <= info.scopes[@enumToInt(internals.bound_scope)].instance_count);
         assert(@sizeOf(T) == scope_internals.buffer_instance_size_alinged);
 
         @memcpy(
@@ -1837,7 +1848,6 @@ pub const VulkanBackend = struct {
         }};
 
         var image_info = DescriptorImageInfoStack {};
-
         for (scope_info.samplers.as_slice(), 0..) |_, idx| {
             const sampler_image_h = instance_internals.sampler_images[idx];
             assert(sampler_image_h.is_valid());
@@ -1850,47 +1860,60 @@ pub const VulkanBackend = struct {
             });
         }
 
-        var descriptor_writes = [_]vk.WriteDescriptorSet{
-            .{
-                .dst_set = descriptor_set,
-                .dst_binding = 0,
-                .dst_array_element = 0,
-                .descriptor_type = scope_internals.buffer_descriptor_type,
-                .descriptor_count = 1,
-                .p_buffer_info = &buffer_info,
-                .p_image_info = undefined,
-                .p_texel_buffer_view = undefined,
-            },
-            .{
-                .dst_set = descriptor_set,
-                .dst_binding = 1,
-                .dst_array_element = 0,
-                .descriptor_type = .combined_image_sampler,
-                .descriptor_count = 1,
-                .p_buffer_info = undefined,
-                .p_image_info = &image_info.items_raw,
-                .p_texel_buffer_view = undefined,
-            },
-        };
+        // update descriptor sets
+        {
+            var descriptor_writes = core.StackArray(vk.WriteDescriptorSet, 2){};
 
-        // update descriptor set
-        self.vkd.updateDescriptorSets(self.device, descriptor_writes.len, &descriptor_writes, 0, undefined);
+            if (!scope_info.buffers.is_empty()) {
+                descriptor_writes.push(
+                    .{
+                        .dst_set = descriptor_set,
+                        .dst_binding = 0,
+                        .dst_array_element = 0,
+                        .descriptor_type = scope_internals.buffer_descriptor_type,
+                        .descriptor_count = 1,
+                        .p_buffer_info = &buffer_info,
+                        .p_image_info = undefined,
+                        .p_texel_buffer_view = undefined,
+                    }
+                );
+            }
+
+            if (!image_info.is_empty()) {
+                descriptor_writes.push(.{
+                    .dst_set = descriptor_set,
+                    .dst_binding = 1,
+                    .dst_array_element = 0,
+                    .descriptor_type = .combined_image_sampler,
+                    .descriptor_count = 1,
+                    .p_buffer_info = undefined,
+                    .p_image_info = &image_info.items_raw,
+                    .p_texel_buffer_view = undefined,
+                });
+            }
+
+            // update descriptor set
+            self.vkd.updateDescriptorSets(self.device, @intCast(u32, descriptor_writes.len), &descriptor_writes.items_raw, 0, undefined);
+        }
 
         // bind descriptor set
-        const command_buffer = self.command_buffers.?[self.current_frame];
-        const first_set = @intCast(u32, scope_set_index(scope));
-        self.vkd.cmdBindDescriptorSets(
-            command_buffer,
-            .graphics,
-            internals.pipeline.pipeline_layout,
-            first_set,
-            1,
-            @ptrCast([*]const
-                vk.DescriptorSet,
-                &instance_internals.descriptor_sets[self.current_frame]),
-            0,
-            undefined
-        );
+        {
+            const command_buffer = self.command_buffers.?[self.current_frame];
+            const first_set = @intCast(u32, scope_set_index(scope));
+
+            self.vkd.cmdBindDescriptorSets(
+                command_buffer,
+                .graphics,
+                internals.pipeline.pipeline_layout,
+                first_set,
+                1,
+                @ptrCast([*]const
+                    vk.DescriptorSet,
+                    &instance_internals.descriptor_sets[self.current_frame]),
+                0,
+                undefined
+            );
+        }
     }
 
     fn shader_set_object_idx(self: *const Self, internals: *ShaderInternals, value: usize) void {

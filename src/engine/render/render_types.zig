@@ -16,11 +16,21 @@ const assert = std.debug.assert;
 // ----------------------------------------------
 
 // TODO(lm): make sure that 'extern' makes sense
-pub const UniformBufferObject = struct {
-    model: za.Mat4 align(16),
+pub const GlobalShaderData = extern struct {
     view:  za.Mat4 align(16),
     proj:  za.Mat4 align(16),
     reserved_0: za.Mat4 align(16) = undefined,
+    reserved_1: za.Mat4 align(16) = undefined,
+};
+
+// ----------------------------------------------
+
+// TODO(lm): make sure that 'extern' makes sense
+pub const SceneShaderData = extern struct {
+    model: za.Mat4 align(16),
+    reserved_0: za.Mat4 align(16) = undefined,
+    reserved_1: za.Mat4 align(16) = undefined,
+    reserved_2: za.Mat4 align(16) = undefined,
 };
 
 // ----------------------------------------------
