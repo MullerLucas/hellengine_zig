@@ -20,24 +20,26 @@ const ShaderInfo = render.ShaderInfo;
 const ShaderScope = render.shader.ShaderScope;
 
 const engine = @import("../engine.zig");
-const Mesh = engine.resources.Mesh;
-const Vertex = engine.resources.Vertex;
-
-const ObjFace = engine.resources.files.ObjFace;
-
-const Texture = engine.resources.Texture;
+const Mesh     = engine.resources.Mesh;
+const Vertex   = engine.resources.Vertex;
+const ObjFace  = engine.resources.files.ObjFace;
+const Texture  = engine.resources.Texture;
+const Material = engine.resources.Material;
 
 // ----------------------------------------------
 
 pub const Renderer = struct {
-    const mesh_limit: usize = 1024;
-    const texture_limit: usize = 1024;
+    // @Todo: come up with sensible values
+    const mesh_limit:     usize = 1024;
+    const texture_limit:  usize = 1024;
+    const material_limit: usize = 1024;
 
     allocator: std.mem.Allocator,
     frame_timer: FrameTimer,
     backend: VulkanBackend,
     meshes: core.StackArray(Mesh, mesh_limit) = .{},
     textures: core.StackArray(Texture, texture_limit) = .{},
+    materials: core.StackArray(Material, material_limit) = .{},
 
 
     pub fn init(allocator: std.mem.Allocator, window: *GlfwWindow) !Renderer {
@@ -59,6 +61,12 @@ pub const Renderer = struct {
 
     pub fn deinit(self: *Renderer) void {
         Logger.info("deinitializing renderer-frontend\n", .{});
+
+        // @Hack
+        for (0..self.textures.len) |idx| {
+            self.destroy_texture(ResourceHandle { .value = idx });
+        }
+
         self.backend.deinit();
     }
 
@@ -145,6 +153,7 @@ pub const Renderer = struct {
             try self.backend.create_texture_internals(texture, &raw_image);
         }
 
+        // @Todo: think about using a string
         // set path
         {
             const path_len = std.mem.indexOfSentinel(u8, 0, path);
@@ -171,12 +180,28 @@ pub const Renderer = struct {
 
     // ------------------------------------------
 
-    pub fn create_material_instance(self: *Renderer, program: *ShaderProgram) !ResourceHandle {
-        return try self.backend.shader_acquire_instance_resources(
-            &program.info,
-            &program.internals,
-            .material,
-            Renderer.get_default_material());
+    pub fn create_material(self: *Renderer, program: *ShaderProgram) !ResourceHandle {
+        const material_h = ResourceHandle { .value = self.materials.len };
+        Logger.debug("creating material '{}'", .{material_h.value});
+
+        self.materials.push(Material { });
+        const material = self.get_material_mut(material_h);
+
+        // @Hack
+        material.textures[0] = try self.create_texture("resources/texture_v1.jpg");
+        const texture = self.get_texture(material.textures[0]);
+
+        try self.backend.create_material_internals(program, &material.internals, Renderer.get_default_material());
+
+        self.backend.shader_set_material_texture_image(&program.internals, &texture.internals);
+
+        return material_h;
+    }
+
+    pub fn destroy_material(self: *Renderer, _: *ShaderProgram, material_h: ResourceHandle) void {
+        const material = self.get_material_mut(material_h);
+        self.backend.destroy_material_internals(&material.internals);
+        material.internals = undefined;
     }
 
     // @Todo: actually implement
@@ -189,6 +214,14 @@ pub const Renderer = struct {
         return ResourceHandle.zero;
     }
 
+    pub fn get_material(self: *Renderer, material_h: ResourceHandle) *const Material {
+        return self.materials.get(material_h.value);
+    }
+
+    pub fn get_material_mut(self: *Renderer, material_h: ResourceHandle) *Material {
+        return self.materials.get_mut(material_h.value);
+    }
+
     // @Todo: actually implement
     pub fn find_material(self: *const Renderer, name: []const u8) ?ResourceHandle {
         _ = self;
@@ -198,16 +231,15 @@ pub const Renderer = struct {
 
     // ------------------------------------------
 
-    pub fn create_mesh_from_file(self: *Renderer, mesh_path: []const u8, texture_h: ResourceHandle) !ResourceHandle {
+    pub fn create_mesh_from_file(self: *Renderer, mesh_path: []const u8) !ResourceHandle {
         Logger.debug("creating mesh '{}' from file '{s}'\n", .{self.meshes.len, mesh_path});
 
         const obj_file = try std.fs.cwd().openFile(mesh_path, .{});
         defer obj_file.close();
         var reader = std.io.bufferedReader(obj_file.reader());
 
-        const texture = self.get_texture(texture_h);
         var mesh = try self.parse_obj_file(reader.reader());
-        try self.backend.create_mesh_internals(&mesh, &texture.internals);
+        try self.backend.create_mesh_internals(&mesh);
 
         self.meshes.push(mesh);
         return ResourceHandle { .value = self.meshes.len - 1 };

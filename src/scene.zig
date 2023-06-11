@@ -21,12 +21,11 @@ const za = @import("zalgebra");
 // ----------------------------------------------g
 
 pub const TestScene = struct {
-    const mesh_limit: usize = 1024;
 
-    renderer:   *Renderer,
-    program:    *ShaderProgram    = undefined,
-    textures_h: [4]ResourceHandle = undefined,
-    meshes_h:   [1]ResourceHandle = undefined,
+    renderer:    *Renderer,
+    program:     *ShaderProgram    = undefined,
+    meshes_h:    [1]ResourceHandle = undefined,
+    materials_h: [1]ResourceHandle = undefined,
 
     pub fn init(allocator: std.mem.Allocator, renderer: *Renderer) !TestScene {
         Logger.info("initializing test-scene\n", .{});
@@ -57,30 +56,20 @@ pub const TestScene = struct {
             try shader_info.add_uniform_buffer (allocator, .object, "object_idx", @sizeOf(usize));
 
             self.program = try self.renderer.create_shader_program(shader_info);
-
-            // @Todo: handle differently
-            _ = try self.renderer.backend.shader_acquire_instance_resources(&shader_info, &self.program.internals, .global, Renderer.get_default_material());
-            _ = try self.renderer.backend.shader_acquire_instance_resources(&shader_info, &self.program.internals, .scene,  Renderer.get_default_material());
-
-            _ = try self.renderer.create_material_instance(self.program);
         }
 
-        // update shader
+        // create materials
         {
-            self.textures_h[0] = try self.renderer.create_texture("resources/texture_v1.jpg");
-            self.textures_h[1] = try self.renderer.create_texture("resources/texture_v2.jpg");
-            self.textures_h[2] = try self.renderer.create_texture("resources/texture_v3.jpg");
-            self.textures_h[3] = try self.renderer.create_texture("resources/texture_v4.jpg");
+            // @Todo: handle differently
+            _ = try self.renderer.backend.shader_acquire_instance_resources(&self.program.info, &self.program.internals, .global, Renderer.get_default_material());
+            _ = try self.renderer.backend.shader_acquire_instance_resources(&self.program.info, &self.program.internals, .scene,  Renderer.get_default_material());
 
-            Logger.debug("test texture created '{}'", .{self.textures_h[0]});
-
-            const texture = self.renderer.get_texture(self.textures_h[0]);
-            self.renderer.backend.shader_set_material_texture_image(&self.program.internals, &texture.internals);
+            self.materials_h[0] = try self.renderer.create_material(self.program);
         }
 
         // create meshes
         {
-            self.meshes_h[0] = try self.renderer.create_mesh_from_file("art/simple_box.obj", self.textures_h[0]);
+            self.meshes_h[0] = try self.renderer.create_mesh_from_file("art/simple_box.obj");
         }
 
         return self;
@@ -93,8 +82,8 @@ pub const TestScene = struct {
             self.renderer.destroy_mesh(mesh_h);
         }
 
-        for (self.textures_h) |texture_h| {
-            self.renderer.destroy_texture(texture_h);
+        for (self.materials_h) |material_h| {
+            self.renderer.destroy_material(self.program, material_h);
         }
 
         self.renderer.destroy_shader_program(self.program);

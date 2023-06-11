@@ -55,6 +55,13 @@ pub const Texture = struct {
 
 // ----------------------------------------------
 
+pub const Material = struct {
+    textures: [engine.config.max_uniform_samplers_per_instance]ResourceHandle = undefined,
+    internals: backend_resources.MaterialInternals = .{}
+};
+
+// ----------------------------------------------
+
 pub const Mesh = struct {
     pub const IndexType = u32;
 

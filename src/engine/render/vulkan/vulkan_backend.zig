@@ -32,18 +32,21 @@ const GraphicsPipeline   = vulkan.GraphicsPipeline;
 const SwapChainSupportDetails = vulkan.SwapChainSupportDetails;
 
 const ShaderInternals = vulkan.ShaderInternals;
+const ShaderProgram = render.ShaderProgram;
 const ShaderScope = render.shader.ShaderScope;
 const ShaderScopeInternals = vulkan.ShaderInternals;
 const ShaderInstanceInternals = vulkan.ShaderInstanceInternals;
 const PushConstantInternals = vulkan.PushConstantInternals;
 
-const Vertex        = engine.resources.Vertex;
-const Mesh          = engine.resources.Mesh;
-const RawImage      = engine.resources.RawImage;
-const Texture       = engine.resources.Texture;
+const Vertex   = engine.resources.Vertex;
+const Mesh     = engine.resources.Mesh;
+const RawImage = engine.resources.RawImage;
+const Texture  = engine.resources.Texture;
+const Material = engine.resources.Material;
 
-const MeshInternals    = vulkan.resources.MeshInternals;
-const TextureInternals = vulkan.resources.TextureInternals;
+const MeshInternals     = vulkan.resources.MeshInternals;
+const TextureInternals  = vulkan.resources.TextureInternals;
+const MaterialInternals = vulkan.resources.MaterialInternals;
 
 
 // ----------------------------------------------
@@ -1942,10 +1945,30 @@ pub const VulkanBackend = struct {
 
     // ------------------------------------------
 
-    pub fn create_mesh_internals(self: *Self, mesh: *Mesh, texture_internals: *const TextureInternals) !void {
+    // @Todo: implement
+    pub fn create_material_internals(self: *VulkanBackend, program: *ShaderProgram, internals: *MaterialInternals, default_material: ResourceHandle) !void {
+        const instance_h = try self.shader_acquire_instance_resources(
+            &program.info,
+            &program.internals,
+            .material,
+            default_material);
+
+        internals.* = MaterialInternals {
+            .instance_h = instance_h
+        };
+    }
+
+    // @Todo: implement
+    pub fn destroy_material_internals(self: *VulkanBackend, internals: *MaterialInternals) void {
+        _ = internals;
+        _ = self;
+    }
+
+    // ------------------------------------------
+
+    pub fn create_mesh_internals(self: *Self, mesh: *Mesh) !void {
         mesh.internals.vertex_buffer_h = try self.create_vertex_buffer(mesh.vertices[0..]);
         mesh.internals.index_buffer_h  = try self.create_index_buffer (mesh.indices[0..]);
-        mesh.internals.texture_h = texture_internals.image_h;
     }
 
     pub fn destroy_mesh_internals(self: *Self, mesh: *Mesh) void {
