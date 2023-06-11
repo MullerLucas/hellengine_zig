@@ -167,7 +167,7 @@ pub const Renderer = struct {
     pub fn destroy_texture(self: *Renderer, texture_h: ResourceHandle) void {
         Logger.debug("destroy texture '{}'\n", .{texture_h.value});
         const texture = self.get_texture_mut(texture_h);
-        self.backend.destroy_texture_image(&texture.internals);
+        self.backend.destroy_texture_internals(texture);
     }
 
     pub fn get_texture(self: *const Renderer, texture_h: ResourceHandle) *const Texture {
@@ -191,7 +191,7 @@ pub const Renderer = struct {
         material.textures[0] = try self.create_texture("resources/texture_v1.jpg");
         const texture = self.get_texture(material.textures[0]);
 
-        try self.backend.create_material_internals(program, &material.internals, Renderer.get_default_material());
+        try self.backend.create_material_internals(program, material, Renderer.get_default_material());
 
         self.backend.shader_set_material_texture_image(&program.internals, &texture.internals);
 
@@ -200,7 +200,7 @@ pub const Renderer = struct {
 
     pub fn destroy_material(self: *Renderer, _: *ShaderProgram, material_h: ResourceHandle) void {
         const material = self.get_material_mut(material_h);
-        self.backend.destroy_material_internals(&material.internals);
+        self.backend.destroy_material_internals(material);
         material.internals = undefined;
     }
 

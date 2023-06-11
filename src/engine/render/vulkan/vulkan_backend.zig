@@ -604,9 +604,10 @@ pub const VulkanBackend = struct {
         };
     }
 
-    pub fn destroy_texture_image(self: *Self, texture_internals: *TextureInternals) void {
-        Logger.debug("destroy texture image internals '{}'", .{texture_internals.image_h.value});
-        self.free_image(texture_internals.image_h);
+    pub fn destroy_texture_internals(self: *Self, texture: *Texture) void {
+        Logger.debug("destroy texture image internals", .{});
+        self.free_image(texture.internals.image_h);
+        texture.internals = undefined;
     }
 
     fn create_texture_sampler(self: *Self) !vk.Sampler {
@@ -1945,23 +1946,22 @@ pub const VulkanBackend = struct {
 
     // ------------------------------------------
 
-    // @Todo: implement
-    pub fn create_material_internals(self: *VulkanBackend, program: *ShaderProgram, internals: *MaterialInternals, default_material: ResourceHandle) !void {
+    pub fn create_material_internals(self: *VulkanBackend, program: *ShaderProgram, material: *Material, default_material: ResourceHandle) !void {
         const instance_h = try self.shader_acquire_instance_resources(
             &program.info,
             &program.internals,
             .material,
             default_material);
 
-        internals.* = MaterialInternals {
+        material.internals = MaterialInternals {
             .instance_h = instance_h
         };
     }
 
     // @Todo: implement
-    pub fn destroy_material_internals(self: *VulkanBackend, internals: *MaterialInternals) void {
-        _ = internals;
+    pub fn destroy_material_internals(self: *VulkanBackend, material: *Material) void {
         _ = self;
+        material.internals = undefined;
     }
 
     // ------------------------------------------
@@ -1974,9 +1974,6 @@ pub const VulkanBackend = struct {
     pub fn destroy_mesh_internals(self: *Self, mesh: *Mesh) void {
         self.free_buffer_h(mesh.internals.vertex_buffer_h);
         self.free_buffer_h(mesh.internals.index_buffer_h);
-        // @Todo: mesh can't free image - image might be used by multiple meshes
-        // self.free_image   (mesh.internals.texture_h);
-
         mesh.internals = undefined;
     }
 
