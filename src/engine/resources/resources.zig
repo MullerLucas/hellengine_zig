@@ -2,6 +2,8 @@ const std = @import("std");
 const engine = @import("../engine.zig");
 const vk = @import("vulkan");
 
+const ResourceHandle = engine.core.ResourceHandle;
+
 pub const files = @import("files.zig");
 pub const Logger = @import("../core/core.zig").log.scoped(.resources);
 
@@ -24,6 +26,24 @@ pub const Vertex = struct {
             .input_rate = .vertex,
         };
     }
+};
+
+// ----------------------------------------------
+
+pub const RawImage = struct {
+    width:    u32 = 0,
+    height:   u32 = 0,
+    channels: u32 = 0,
+    pixels:   [*]u8 = undefined,
+};
+
+// ----------------------------------------------
+
+pub const Texture = struct {
+    pub const name_limit: usize = 128;
+
+    path: [name_limit]u8 = undefined,
+    internals_h: ResourceHandle,
 };
 
 // ----------------------------------------------

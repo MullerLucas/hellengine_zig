@@ -1,4 +1,6 @@
 const std = @import("std");
+const c = @import("../c.zig");
+
 
 const GlfwWindow = @import("../GlfwWindow.zig");
 
@@ -23,15 +25,19 @@ const Vertex = engine.resources.Vertex;
 
 const ObjFace = engine.resources.files.ObjFace;
 
+const Texture = engine.resources.Texture;
+
 // ----------------------------------------------
 
 pub const Renderer = struct {
     const mesh_limit: usize = 1024;
+    const texture_limit: usize = 1024;
 
     allocator: std.mem.Allocator,
     frame_timer: FrameTimer,
     backend: VulkanBackend,
     meshes: core.StackArray(Mesh, mesh_limit) = .{},
+    textures: core.StackArray(Texture, texture_limit) = .{},
 
 
     pub fn init(allocator: std.mem.Allocator, window: *GlfwWindow) !Renderer {
@@ -99,6 +105,69 @@ pub const Renderer = struct {
 
     // ------------------------------------------
 
+    // @Todo: move somewhere else
+    pub fn create_raw_image_from_file(path: [*:0]const u8) !engine.resources.RawImage {
+        var width:    c_int = undefined;
+        var height:   c_int = undefined;
+        var channels: c_int = undefined;
+
+        var pixels: ?[*]u8 = c.stbi_load(path, &width, &height, &channels, c.STBI_rgb_alpha);
+        errdefer c.stbi_image_free(pixels);
+
+        if (pixels == null) {
+            Logger.err("failed to load image '{s}'\n", .{path});
+            return error.ImageLoadFailure;
+        }
+
+        return engine.resources.RawImage {
+            .width  = @intCast(u32, width),
+            .height = @intCast(u32, height),
+            .pixels = pixels.?,
+        };
+    }
+
+    // @Todo: move somewhere else
+    pub fn destroy_raw_image(image: *engine.resources.RawImage) void {
+        c.stbi_image_free(image.pixels);
+    }
+
+    pub fn create_texture(self: *Renderer, path: [*:0]const u8) !ResourceHandle {
+        const texture_h = ResourceHandle { .value = self.textures.len };
+        Logger.debug("create texture '{}' from path '{s}", .{texture_h.value, path});
+
+        var raw_image = try Renderer.create_raw_image_from_file(path);
+        defer Renderer.destroy_raw_image(&raw_image);
+
+        const internals_h = try self.backend.create_texture_image(&raw_image);
+
+        self.textures.push(Texture {
+            .internals_h = internals_h,
+        });
+        var texture = self.get_texture(texture_h);
+
+        const path_len = std.mem.indexOfSentinel(u8, 0, path);
+        std.debug.assert(path_len <= Texture.name_limit);
+        @memcpy(texture.path[0..path_len], path[0..path_len]);
+
+        return texture_h;
+    }
+
+    pub fn destroy_texture(self: *Renderer, texture_h: ResourceHandle) void {
+        Logger.debug("destroy texture '{}'\n", .{texture_h.value});
+        const texture = self.get_texture(texture_h);
+        self.backend.destroy_texture_image(texture.internals_h);
+    }
+
+    pub fn get_texture(self: *const Renderer, texture_h: ResourceHandle) *const Texture {
+        return self.textures.get(texture_h.value);
+    }
+
+    pub fn get_texture_mut(self: *Renderer, texture_h: ResourceHandle) *Texture {
+        return self.textures.get_mut(texture_h.value);
+    }
+
+    // ------------------------------------------
+
     pub fn create_material_instance(self: *Renderer, program: *ShaderProgram) !ResourceHandle {
         return try self.backend.shader_acquire_instance_resources(
             &program.info,
@@ -126,24 +195,25 @@ pub const Renderer = struct {
 
     // ------------------------------------------
 
-    pub fn create_mesh_from_file(self: *Renderer, mesh_path: []const u8, texture_path: [*:0]const u8) !ResourceHandle {
+    pub fn create_mesh_from_file(self: *Renderer, mesh_path: []const u8, texture_h: ResourceHandle) !ResourceHandle {
         Logger.debug("creating mesh '{}' from file '{s}'\n", .{self.meshes.len, mesh_path});
 
         const obj_file = try std.fs.cwd().openFile(mesh_path, .{});
         defer obj_file.close();
         var reader = std.io.bufferedReader(obj_file.reader());
 
+        const texture = self.get_texture(texture_h);
         var mesh = try self.parse_obj_file(reader.reader());
-        try self.backend.create_mesh_internals(&mesh, texture_path);
+        try self.backend.create_mesh_internals(&mesh, texture.internals_h);
 
         self.meshes.push(mesh);
         return ResourceHandle { .value = self.meshes.len - 1 };
     }
 
-    pub fn deinit_mesh(self: *Renderer, mesh_h: ResourceHandle) void {
+    pub fn destroy_mesh(self: *Renderer, mesh_h: ResourceHandle) void {
         const mesh = self.get_mesh_mut(mesh_h);
 
-        self.backend.deinit_mesh_internals(mesh);
+        self.backend.destroy_mesh_internals(mesh);
 
         self.allocator.free(mesh.vertices);
         self.allocator.free(mesh.indices);

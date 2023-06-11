@@ -38,11 +38,6 @@ pub const TestScene = struct {
             .renderer    = renderer,
         };
 
-        // create meshes
-        {
-            self.meshes_h[0] = try self.renderer.create_mesh_from_file("art/simple_box.obj", "resources/texture.jpg");
-        }
-
         // create shader-program
         {
             var shader_info = ShaderInfo { };
@@ -72,15 +67,25 @@ pub const TestScene = struct {
 
         // update shader
         {
-            self.textures_h[0] = try self.renderer.backend.create_texture_image("resources/texture_v1.jpg");
-            self.textures_h[1] = try self.renderer.backend.create_texture_image("resources/texture_v2.jpg");
-            self.textures_h[2] = try self.renderer.backend.create_texture_image("resources/texture_v3.jpg");
-            self.textures_h[3] = try self.renderer.backend.create_texture_image("resources/texture_v4.jpg");
+            self.textures_h[0] = try self.renderer.create_texture("resources/texture_v1.jpg");
+            self.textures_h[1] = try self.renderer.create_texture("resources/texture_v2.jpg");
+            self.textures_h[2] = try self.renderer.create_texture("resources/texture_v3.jpg");
+            self.textures_h[3] = try self.renderer.create_texture("resources/texture_v4.jpg");
+
+            // @Todo: this is shit
+            const texture = self.renderer.get_texture(self.textures_h[0]);
+            const texture_update = [_]ResourceHandle { texture.internals_h };
 
             // update .unit textures
             self.renderer.backend.shader_bind_scope(&self.program.internals, .material, ResourceHandle.zero);
-            self.renderer.backend.shader_set_uniform_sampler(&self.program.internals, self.textures_h[2..3]);
+            self.renderer.backend.shader_set_uniform_sampler(&self.program.internals, &texture_update);
         }
+
+        // create meshes
+        {
+            self.meshes_h[0] = try self.renderer.create_mesh_from_file("art/simple_box.obj", self.textures_h[0]);
+        }
+
 
         return self;
     }
@@ -89,12 +94,11 @@ pub const TestScene = struct {
         Logger.info("deinitializing test-scene\n", .{});
 
         for (self.meshes_h) |mesh_h| {
-            self.renderer.deinit_mesh(mesh_h);
+            self.renderer.destroy_mesh(mesh_h);
         }
 
         for (self.textures_h) |texture_h| {
-            // TODO(lm): go through renderer, not backend
-            self.renderer.backend.free_image(texture_h);
+            self.renderer.destroy_texture(texture_h);
         }
 
         self.renderer.destroy_shader_program(self.program);

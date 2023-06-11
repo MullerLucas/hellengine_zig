@@ -4,8 +4,8 @@ const ResourceHandle = core.ResourceHandle;
 
 
 pub const MeshInternals = struct {
-    vertex_buffer: ResourceHandle = ResourceHandle.invalid,
-    index_buffer:  ResourceHandle = ResourceHandle.invalid,
+    vertex_buffer_h: ResourceHandle = ResourceHandle.invalid,
+    index_buffer_h:  ResourceHandle = ResourceHandle.invalid,
     // TODO(lm): texture should be optional
-    texture:       ResourceHandle = ResourceHandle.invalid,
+    texture_h:       ResourceHandle = ResourceHandle.invalid,
 };

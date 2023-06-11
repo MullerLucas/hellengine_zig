@@ -39,12 +39,9 @@ const PushConstantInternals = vulkan.PushConstantInternals;
 
 const Vertex        = engine.resources.Vertex;
 const Mesh          = engine.resources.Mesh;
+const RawImage      = engine.resources.RawImage;
 const MeshInternals = vulkan.resources.MeshInternals;
 
-
-const c = @cImport({
-    @cInclude("stb_image.h");
-});
 
 // ----------------------------------------------
 
@@ -567,39 +564,41 @@ pub const VulkanBackend = struct {
         return format == .d32_sfloat_s8_uint or format == .d24_unorm_s8_uint;
     }
 
-    pub fn create_texture_image(self: *Self, path: [*:0]const u8) !ResourceHandle {
-        var tex_width: c_int = undefined;
-        var tex_height: c_int = undefined;
-        var channels: c_int = undefined;
-        const pixels = c.stbi_load(path, &tex_width, &tex_height, &channels, c.STBI_rgb_alpha);
-        defer c.stbi_image_free(pixels);
-        if (pixels == null) {
-            Logger.err("failed to load image '{s}'\n", .{path});
-            return error.ImageLoadFailure;
-        }
-
-        const image_size: vk.DeviceSize = @intCast(u64, tex_width) * @intCast(u64, tex_height) * 4;
+    pub fn create_texture_image(self: *Self, raw_image: *const RawImage) !ResourceHandle {
+        const image_size: vk.DeviceSize = @intCast(u64, raw_image.width) * @intCast(u64, raw_image.height) * 4;
 
         const staging_buf_handle = try self.create_buffer(image_size, .{ .transfer_src_bit = true }, .{ .host_visible_bit = true, .host_coherent_bit = true });
         const staging_buffer     = self.get_buffer(staging_buf_handle);
         defer self.free_buffer_h(staging_buf_handle);
 
         const data = try self.vkd.mapMemory(self.device, staging_buffer.mem, 0, image_size, .{});
-        std.mem.copy(u8, @ptrCast([*]u8, data.?)[0..image_size], pixels[0..image_size]);
+        std.mem.copy(u8, @ptrCast([*]u8, data.?)[0..image_size], raw_image.pixels[0..image_size]);
         self.vkd.unmapMemory(self.device, staging_buffer.mem);
 
-        const texture_image_handle = try self.create_image(@intCast(u32, tex_width), @intCast(u32, tex_height), .r8g8b8a8_srgb, .optimal, .{ .transfer_dst_bit = true, .sampled_bit = true }, .{ .device_local_bit = true });
+        const texture_image_handle = try self.create_image(
+            raw_image.width,
+            raw_image.height,
+            .r8g8b8a8_srgb,
+            .optimal,
+            .{ .transfer_dst_bit = true, .sampled_bit = true },
+            .{ .device_local_bit = true });
         var texture_image = self.get_image(texture_image_handle);
 
         try self.transition_image_layout(texture_image.img, .r8g8b8a8_srgb, .@"undefined", .transfer_dst_optimal);
-        try self.copy_buffer_to_image(staging_buffer.buf, texture_image.img, @intCast(u32, tex_width), @intCast(u32, tex_height));
+        try self.copy_buffer_to_image(staging_buffer.buf, texture_image.img, raw_image.width, raw_image.height);
         try self.transition_image_layout(texture_image.img, .r8g8b8a8_srgb, .transfer_dst_optimal, .shader_read_only_optimal);
 
         texture_image.view    = try self.create_image_view(texture_image.img, .r8g8b8a8_srgb, .{ .color_bit = true });
         texture_image.sampler = try self.create_texture_sampler();
+        // @Todo: this is awful
         self.set_image(texture_image_handle, texture_image);
 
         return texture_image_handle;
+    }
+
+    pub fn destroy_texture_image(self: *Self, image_internals_h: ResourceHandle) void {
+        Logger.debug("destroy texture image internals '{}'", .{image_internals_h.value});
+        self.free_image(image_internals_h);
     }
 
     fn create_texture_sampler(self: *Self) !vk.Sampler {
@@ -1020,8 +1019,8 @@ pub const VulkanBackend = struct {
 
             for (render_data.meshes.as_slice(), 0..) |mesh, idx| {
                 const offsets = [_]vk.DeviceSize{0};
-                const vertex_buffers = [_]vk.Buffer {self.get_buffer(mesh.internals.vertex_buffer).buf};
-                const index_buffer = self.get_buffer(mesh.internals.index_buffer).buf;
+                const vertex_buffers = [_]vk.Buffer {self.get_buffer(mesh.internals.vertex_buffer_h).buf};
+                const index_buffer = self.get_buffer(mesh.internals.index_buffer_h).buf;
                 const index_count = @intCast(u32, mesh.indices.len);
 
                 self.vkd.cmdBindVertexBuffers(command_buffer, 0, 1, &vertex_buffers, &offsets);
@@ -1933,16 +1932,17 @@ pub const VulkanBackend = struct {
 
     // ------------------------------------------
 
-    pub fn create_mesh_internals(self: *Self, mesh: *Mesh, texture_path: [*:0]const u8) !void {
-        mesh.internals.vertex_buffer = try self.create_vertex_buffer(mesh.vertices[0..]);
-        mesh.internals.index_buffer  = try self.create_index_buffer (mesh.indices[0..]);
-        mesh.internals.texture       = try self.create_texture_image(texture_path);
+    pub fn create_mesh_internals(self: *Self, mesh: *Mesh, texture_internals_h: ResourceHandle) !void {
+        mesh.internals.vertex_buffer_h = try self.create_vertex_buffer(mesh.vertices[0..]);
+        mesh.internals.index_buffer_h  = try self.create_index_buffer (mesh.indices[0..]);
+        mesh.internals.texture_h = texture_internals_h;
     }
 
-    pub fn deinit_mesh_internals(self: *Self, mesh: *Mesh) void {
-        self.free_buffer_h(mesh.internals.vertex_buffer);
-        self.free_buffer_h(mesh.internals.index_buffer);
-        self.free_image   (mesh.internals.texture);
+    pub fn destroy_mesh_internals(self: *Self, mesh: *Mesh) void {
+        self.free_buffer_h(mesh.internals.vertex_buffer_h);
+        self.free_buffer_h(mesh.internals.index_buffer_h);
+        // @Todo: mesh can't free image - image might be used by multiple meshes
+        // self.free_image   (mesh.internals.texture_h);
 
         mesh.internals = undefined;
     }
