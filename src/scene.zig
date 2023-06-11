@@ -72,20 +72,16 @@ pub const TestScene = struct {
             self.textures_h[2] = try self.renderer.create_texture("resources/texture_v3.jpg");
             self.textures_h[3] = try self.renderer.create_texture("resources/texture_v4.jpg");
 
-            // @Todo: this is shit
-            const texture = self.renderer.get_texture(self.textures_h[0]);
-            const texture_update = [_]ResourceHandle { texture.internals_h };
+            Logger.debug("test texture created '{}'", .{self.textures_h[0]});
 
-            // update .unit textures
-            self.renderer.backend.shader_bind_scope(&self.program.internals, .material, ResourceHandle.zero);
-            self.renderer.backend.shader_set_uniform_sampler(&self.program.internals, &texture_update);
+            const texture = self.renderer.get_texture(self.textures_h[0]);
+            self.renderer.backend.shader_set_material_texture_image(&self.program.internals, &texture.internals);
         }
 
         // create meshes
         {
             self.meshes_h[0] = try self.renderer.create_mesh_from_file("art/simple_box.obj", self.textures_h[0]);
         }
-
 
         return self;
     }

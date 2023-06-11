@@ -40,7 +40,10 @@ const PushConstantInternals = vulkan.PushConstantInternals;
 const Vertex        = engine.resources.Vertex;
 const Mesh          = engine.resources.Mesh;
 const RawImage      = engine.resources.RawImage;
-const MeshInternals = vulkan.resources.MeshInternals;
+const Texture       = engine.resources.Texture;
+
+const MeshInternals    = vulkan.resources.MeshInternals;
+const TextureInternals = vulkan.resources.TextureInternals;
 
 
 // ----------------------------------------------
@@ -564,7 +567,7 @@ pub const VulkanBackend = struct {
         return format == .d32_sfloat_s8_uint or format == .d24_unorm_s8_uint;
     }
 
-    pub fn create_texture_image(self: *Self, raw_image: *const RawImage) !ResourceHandle {
+    pub fn create_texture_internals(self: *Self, texture: *Texture, raw_image: *const RawImage) !void {
         const image_size: vk.DeviceSize = @intCast(u64, raw_image.width) * @intCast(u64, raw_image.height) * 4;
 
         const staging_buf_handle = try self.create_buffer(image_size, .{ .transfer_src_bit = true }, .{ .host_visible_bit = true, .host_coherent_bit = true });
@@ -575,14 +578,14 @@ pub const VulkanBackend = struct {
         std.mem.copy(u8, @ptrCast([*]u8, data.?)[0..image_size], raw_image.pixels[0..image_size]);
         self.vkd.unmapMemory(self.device, staging_buffer.mem);
 
-        const texture_image_handle = try self.create_image(
+        const texture_image_h = try self.create_image(
             raw_image.width,
             raw_image.height,
             .r8g8b8a8_srgb,
             .optimal,
             .{ .transfer_dst_bit = true, .sampled_bit = true },
             .{ .device_local_bit = true });
-        var texture_image = self.get_image(texture_image_handle);
+        var texture_image = self.get_image(texture_image_h);
 
         try self.transition_image_layout(texture_image.img, .r8g8b8a8_srgb, .@"undefined", .transfer_dst_optimal);
         try self.copy_buffer_to_image(staging_buffer.buf, texture_image.img, raw_image.width, raw_image.height);
@@ -591,14 +594,16 @@ pub const VulkanBackend = struct {
         texture_image.view    = try self.create_image_view(texture_image.img, .r8g8b8a8_srgb, .{ .color_bit = true });
         texture_image.sampler = try self.create_texture_sampler();
         // @Todo: this is awful
-        self.set_image(texture_image_handle, texture_image);
+        self.set_image(texture_image_h, texture_image);
 
-        return texture_image_handle;
+        texture.internals = TextureInternals {
+            .image_h = texture_image_h
+        };
     }
 
-    pub fn destroy_texture_image(self: *Self, image_internals_h: ResourceHandle) void {
-        Logger.debug("destroy texture image internals '{}'", .{image_internals_h.value});
-        self.free_image(image_internals_h);
+    pub fn destroy_texture_image(self: *Self, texture_internals: *TextureInternals) void {
+        Logger.debug("destroy texture image internals '{}'", .{texture_internals.image_h.value});
+        self.free_image(texture_internals.image_h);
     }
 
     fn create_texture_sampler(self: *Self) !vk.Sampler {
@@ -1651,7 +1656,6 @@ pub const VulkanBackend = struct {
                 for (scope_info.buffers.as_slice()) |scope_buffer| {
                     Logger.debug("add push constant '{s}' with size '{}' to scope '{}'\n", .{scope_buffer.name.data.items, scope_buffer.size, scope});
 
-
                     const range = core.utils.get_aligned_range(0, scope_buffer.size, CFG.vulkan_push_constant_alignment);
                     internals.push_constant_internals.push(.{
                         .range = range,
@@ -1771,6 +1775,12 @@ pub const VulkanBackend = struct {
     pub fn shader_bind_scope(_: *Self, internals: *ShaderInternals, scope: ShaderScope, instance_h: ResourceHandle) void {
         internals.bound_scope = scope;
         internals.bound_instance_h = instance_h;
+    }
+
+    // @Hack
+    pub fn shader_set_material_texture_image(self: *Self, shader_internals: *ShaderInternals, texture_internals: *const TextureInternals) void {
+        self.shader_bind_scope(shader_internals, .material, ResourceHandle.zero);
+        self.shader_set_uniform_sampler(shader_internals, @ptrCast([*]const ResourceHandle, &texture_internals.image_h)[0..1]);
     }
 
     /// scope and instance must be set before calling this function
@@ -1932,10 +1942,10 @@ pub const VulkanBackend = struct {
 
     // ------------------------------------------
 
-    pub fn create_mesh_internals(self: *Self, mesh: *Mesh, texture_internals_h: ResourceHandle) !void {
+    pub fn create_mesh_internals(self: *Self, mesh: *Mesh, texture_internals: *const TextureInternals) !void {
         mesh.internals.vertex_buffer_h = try self.create_vertex_buffer(mesh.vertices[0..]);
         mesh.internals.index_buffer_h  = try self.create_index_buffer (mesh.indices[0..]);
-        mesh.internals.texture_h = texture_internals_h;
+        mesh.internals.texture_h = texture_internals.image_h;
     }
 
     pub fn destroy_mesh_internals(self: *Self, mesh: *Mesh) void {

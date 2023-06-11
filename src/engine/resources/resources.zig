@@ -8,6 +8,13 @@ pub const files = @import("files.zig");
 pub const Logger = @import("../core/core.zig").log.scoped(.resources);
 
 
+// @Todo
+const backend_resources = if (true)
+    engine.render.vulkan.resources
+ else
+    engine.render.vulkan.resources;
+
+
 
 
 // ----------------------------------------------
@@ -43,7 +50,7 @@ pub const Texture = struct {
     pub const name_limit: usize = 128;
 
     path: [name_limit]u8 = undefined,
-    internals_h: ResourceHandle,
+    internals: backend_resources.TextureInternals = .{},
 };
 
 // ----------------------------------------------
@@ -53,7 +60,6 @@ pub const Mesh = struct {
 
     vertices: []Vertex,
     indices:  []IndexType,
-    // TODO(lm): make backend generic
-    internals: engine.render.vulkan.resources.MeshInternals = undefined,
+    internals: backend_resources.MeshInternals = undefined,
 
 };

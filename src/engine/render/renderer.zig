@@ -135,27 +135,30 @@ pub const Renderer = struct {
         const texture_h = ResourceHandle { .value = self.textures.len };
         Logger.debug("create texture '{}' from path '{s}", .{texture_h.value, path});
 
-        var raw_image = try Renderer.create_raw_image_from_file(path);
-        defer Renderer.destroy_raw_image(&raw_image);
+        self.textures.push(Texture { });
+        const texture = self.get_texture_mut(texture_h);
 
-        const internals_h = try self.backend.create_texture_image(&raw_image);
+        // create internals
+        {
+            var raw_image = try Renderer.create_raw_image_from_file(path);
+            defer Renderer.destroy_raw_image(&raw_image);
+            try self.backend.create_texture_internals(texture, &raw_image);
+        }
 
-        self.textures.push(Texture {
-            .internals_h = internals_h,
-        });
-        var texture = self.get_texture(texture_h);
-
-        const path_len = std.mem.indexOfSentinel(u8, 0, path);
-        std.debug.assert(path_len <= Texture.name_limit);
-        @memcpy(texture.path[0..path_len], path[0..path_len]);
+        // set path
+        {
+            const path_len = std.mem.indexOfSentinel(u8, 0, path);
+            std.debug.assert(path_len <= Texture.name_limit);
+            @memcpy(texture.path[0..path_len], path[0..path_len]);
+        }
 
         return texture_h;
     }
 
     pub fn destroy_texture(self: *Renderer, texture_h: ResourceHandle) void {
         Logger.debug("destroy texture '{}'\n", .{texture_h.value});
-        const texture = self.get_texture(texture_h);
-        self.backend.destroy_texture_image(texture.internals_h);
+        const texture = self.get_texture_mut(texture_h);
+        self.backend.destroy_texture_image(&texture.internals);
     }
 
     pub fn get_texture(self: *const Renderer, texture_h: ResourceHandle) *const Texture {
@@ -204,7 +207,7 @@ pub const Renderer = struct {
 
         const texture = self.get_texture(texture_h);
         var mesh = try self.parse_obj_file(reader.reader());
-        try self.backend.create_mesh_internals(&mesh, texture.internals_h);
+        try self.backend.create_mesh_internals(&mesh, &texture.internals);
 
         self.meshes.push(mesh);
         return ResourceHandle { .value = self.meshes.len - 1 };
