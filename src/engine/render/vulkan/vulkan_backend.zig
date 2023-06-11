@@ -1031,13 +1031,28 @@ pub const VulkanBackend = struct {
                 const vertex_buffers = [_]vk.Buffer {self.get_buffer(mesh.internals.vertex_buffer_h).buf};
                 const index_buffer = self.get_buffer(mesh.internals.index_buffer_h).buf;
                 const index_count = @intCast(u32, mesh.indices.len);
+                _ = index_count;
 
                 self.vkd.cmdBindVertexBuffers(command_buffer, 0, 1, &vertex_buffers, &offsets);
                 self.vkd.cmdBindIndexBuffer  (command_buffer, index_buffer, 0, to_vk_index_type(Mesh.IndexType));
 
                 self.shader_set_object_idx(internals, idx);
 
-                self.vkd.cmdDrawIndexed(command_buffer, index_count, 1, 0, 0, 0);
+                for (mesh.sub_meshes.as_slice()) |sub_mesh| {
+                    // @Todo: bind material used by sub-mesh
+
+                    // self.vkd.cmdDrawIndexed(command_buffer, index_count, 1, 0, 0, 0);
+                    const instance_count = 1;
+                    const vertex_offset  = 0;
+                    const first_instance = 0;
+                    self.vkd.cmdDrawIndexed(
+                        command_buffer,
+                        @intCast(u32, sub_mesh.index_count),
+                        instance_count,
+                        @intCast(u32, sub_mesh.first_index),
+                        vertex_offset,
+                        first_instance);
+                }
             }
         }
         self.vkd.cmdEndRenderPass(command_buffer);

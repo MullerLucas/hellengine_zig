@@ -21,6 +21,7 @@ const ShaderScope = render.shader.ShaderScope;
 
 const engine = @import("../engine.zig");
 const Mesh     = engine.resources.Mesh;
+const SubMesh  = engine.resources.SubMesh;
 const Vertex   = engine.resources.Vertex;
 const ObjFace  = engine.resources.files.ObjFace;
 const Texture  = engine.resources.Texture;
@@ -283,6 +284,8 @@ pub const Renderer = struct {
 
         // parse obj-file
         {
+            var material_h = ResourceHandle.invalid;
+
             while(try reader.readUntilDelimiterOrEof(&buffer, '\n')) |raw_line| {
                 const line = std.mem.trimLeft(u8, raw_line, " \t");
                 // Logger.debug("parsing line '{s}'\n", .{line});
@@ -316,22 +319,23 @@ pub const Renderer = struct {
                 // faces
                 else if (std.mem.eql(u8, op, "f")) {
                     // @Todo: triangulate ngons
-                    const face_1 = try Renderer.parse_obj_face(splits.next().?);
-                    const face_2 = try Renderer.parse_obj_face(splits.next().?);
-                    const face_3 = try Renderer.parse_obj_face(splits.next().?);
+                    const face_1 = try Renderer.parse_obj_face(splits.next().?, material_h);
+                    const face_2 = try Renderer.parse_obj_face(splits.next().?, material_h);
+                    const face_3 = try Renderer.parse_obj_face(splits.next().?, material_h);
                     try obj_faces.appendSlice(&[_]ObjFace {face_1, face_2, face_3});
                 }
                 // material uses
                 else if (std.mem.eql(u8, op, "usemtl")) {
                     const mat_name = splits.next().?;
-                    if (self.find_material(mat_name)) |material_h| {
-                        Logger.info("material found: '{}'\n", .{material_h});
+                    if (self.find_material(mat_name)) |mh| {
+                        material_h = mh;
                     } else {
-                        Logger.warn("could not find material with name '{s}'\n", .{mat_name});
+                        Logger.err("could not find material with name '{s}'\n", .{mat_name});
                     }
                 }
                 // named objects
                 else if (std.mem.eql(u8, op, "o")) {
+                    Logger.err("@Todo: implement 'o' support\n", .{});
                 }
                 // polygon groups
                 else if (std.mem.eql(u8, op, "g")) {
@@ -377,14 +381,22 @@ pub const Renderer = struct {
 
             Logger.debug("reused '{}' indices\n", .{ reused_count });
 
-            return Mesh {
+            var mesh = Mesh {
                 .vertices = try vertices.toOwnedSlice(),
                 .indices  = try indices.toOwnedSlice(),
             };
+
+            // @Todo: actually implement
+            mesh.sub_meshes.push(SubMesh {
+                .first_index = 0,
+                .index_count = mesh.indices.len,
+            });
+
+            return mesh;
         }
     }
 
-    fn parse_obj_face(face_str: []const u8) !ObjFace {
+    fn parse_obj_face(face_str: []const u8, material_h: ResourceHandle) !ObjFace {
         var split = std.mem.tokenize(u8, face_str, "/");
         const position_offset = try std.fmt.parseInt(u32, split.next().?, 10);
         const uv_offset       = try std.fmt.parseInt(u32, split.next().?, 10);
@@ -394,6 +406,7 @@ pub const Renderer = struct {
             .position_offset = position_offset,
             .uv_offset       = uv_offset,
             .normal_offset   = normal_offset,
+            .material_h      = material_h,
         };
     }
 };

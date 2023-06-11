@@ -62,11 +62,25 @@ pub const Material = struct {
 
 // ----------------------------------------------
 
+// https://registry.khronos.org/vulkan/specs/1.3-khr-extensions/html/vkspec.html#vkCmdDrawIndexed
+pub const SubMesh = struct {
+    // first_index is the base index within the index buffer.
+    first_index: usize,
+    /// index_count is the number of vertices to draw.
+    index_count: usize,
+};
+
+// ----------------------------------------------
+
+// @Performance: think about using stack memory instead
 pub const Mesh = struct {
     pub const IndexType = u32;
+    // @Todo: use sensible value
+    pub const sub_mesh_limit = 16;
 
-    vertices: []Vertex,
-    indices:  []IndexType,
+    vertices:   []Vertex,
+    indices:    []IndexType,
+    sub_meshes: engine.core.StackArray(SubMesh, sub_mesh_limit) = .{},
+
     internals: backend_resources.MeshInternals = undefined,
-
 };
