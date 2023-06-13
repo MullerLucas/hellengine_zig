@@ -40,6 +40,7 @@ const PushConstantInternals = vulkan.PushConstantInternals;
 
 const Vertex   = engine.resources.Vertex;
 const Mesh     = engine.resources.Mesh;
+const SubMesh  = engine.resources.SubMesh;
 const RawImage = engine.resources.RawImage;
 const Texture  = engine.resources.Texture;
 const Material = engine.resources.Material;
@@ -112,11 +113,15 @@ pub const VulkanBackend = struct {
     image_available_semaphores: ?[]vk.Semaphore = null,
     render_finished_semaphores: ?[]vk.Semaphore = null,
     in_flight_fences: ?[]vk.Fence = null,
-    current_frame: u32 = 0,
 
     start_time: std.time.Instant,
 
     render_pass: vk.RenderPass = .null_handle,
+
+    // frame in flight
+    current_frame: u32 = 0,
+    // vulkan frame index
+    curr_image_index: u32 = 0,
 
 
     pub fn init(allocator: Allocator, window: *GlfwWindow) !Self {
@@ -976,31 +981,69 @@ pub const VulkanBackend = struct {
         }, self.command_buffers.?.ptr);
     }
 
-    fn record_command_buffer(self: *Self, command_buffer: vk.CommandBuffer, image_index: u32, render_data: *const RenderData, info: *const ShaderInfo, internals: *ShaderInternals) !void {
-        try self.vkd.beginCommandBuffer(command_buffer, &.{
-            .flags = .{},
-            .p_inheritance_info = null,
-        });
+    fn create_sync_objects(self: *Self) !void {
+        self.image_available_semaphores = try self.allocator.alloc(vk.Semaphore, CFG.MAX_FRAMES_IN_FLIGHT);
+        self.render_finished_semaphores = try self.allocator.alloc(vk.Semaphore, CFG.MAX_FRAMES_IN_FLIGHT);
+        self.in_flight_fences = try self.allocator.alloc(vk.Fence, CFG.MAX_FRAMES_IN_FLIGHT);
 
-        try self.update_shader_uniform_buffer(info, internals);
+        var i: usize = 0;
+        while (i < CFG.MAX_FRAMES_IN_FLIGHT) : (i += 1) {
+            self.image_available_semaphores.?[i] = try self.vkd.createSemaphore(self.device, &.{ .flags = .{} }, null);
+            self.render_finished_semaphores.?[i] = try self.vkd.createSemaphore(self.device, &.{ .flags = .{} }, null);
+            self.in_flight_fences.?[i] = try self.vkd.createFence(self.device, &.{ .flags = .{ .signaled_bit = true } }, null);
+        }
+    }
 
-        const clear_values = [_]vk.ClearValue{
-            .{ .color = .{ .float_32 = .{ 0, 0, 0, 1 } } },
-            .{ .depth_stencil = .{ .depth = 1.0, .stencil = 0 } },
-        };
+    pub fn start_render_pass(self: *Self, info: *const ShaderInfo, internals: *ShaderInternals) !void {
+        _ = try self.vkd.waitForFences(self.device, 1, @ptrCast([*]const vk.Fence, &self.in_flight_fences.?[self.current_frame]), vk.TRUE, std.math.maxInt(u64));
 
-        const render_pass_info = vk.RenderPassBeginInfo{
-            .render_pass = internals.pipeline.render_pass,
-            .framebuffer = self.swap_chain_framebuffers.?[image_index],
-            .render_area = vk.Rect2D{
-                .offset = .{ .x = 0, .y = 0 },
-                .extent = self.swap_chain_extent,
+        const result = self.vkd.acquireNextImageKHR(self.device, self.swap_chain, std.math.maxInt(u64), self.image_available_semaphores.?[self.current_frame], .null_handle) catch |err| switch (err) {
+            error.OutOfDateKHR => {
+                try self.recreate_swap_chain();
+                return;
             },
-            .clear_value_count = clear_values.len,
-            .p_clear_values = &clear_values,
+            else => |e| return e,
         };
 
-        self.vkd.cmdBeginRenderPass(command_buffer, &render_pass_info, .@"inline");
+        if (result.result != .success and result.result != .suboptimal_khr) {
+            return error.ImageAcquireFailed;
+        }
+
+        self.curr_image_index = result.image_index;
+
+        try self.vkd.resetFences(self.device, 1, @ptrCast([*]const vk.Fence, &self.in_flight_fences.?[self.current_frame]));
+        try self.vkd.resetCommandBuffer(self.command_buffers.?[self.current_frame], .{});
+
+
+        const command_buffer = self.command_buffers.?[self.current_frame];
+        {
+
+            try self.vkd.beginCommandBuffer(command_buffer, &.{
+                .flags = .{},
+                .p_inheritance_info = null,
+            });
+
+            try self.update_shader_uniform_buffer(info, internals);
+
+            const clear_values = [_]vk.ClearValue{
+                .{ .color = .{ .float_32 = .{ 0, 0, 0, 1 } } },
+                .{ .depth_stencil = .{ .depth = 1.0, .stencil = 0 } },
+            };
+
+            const render_pass_info = vk.RenderPassBeginInfo{
+                .render_pass = internals.pipeline.render_pass,
+                .framebuffer = self.swap_chain_framebuffers.?[self.curr_image_index],
+                .render_area = vk.Rect2D{
+                    .offset = .{ .x = 0, .y = 0 },
+                    .extent = self.swap_chain_extent,
+                },
+                .clear_value_count = clear_values.len,
+                .p_clear_values = &clear_values,
+            };
+
+            self.vkd.cmdBeginRenderPass(command_buffer, &render_pass_info, .@"inline");
+        }
+
         {
             self.vkd.cmdBindPipeline(command_buffer, .graphics, internals.pipeline.pipeline);
 
@@ -1021,113 +1064,88 @@ pub const VulkanBackend = struct {
             self.vkd.cmdSetScissor(command_buffer, 0, scissors.len, &scissors);
 
             // TODO(lm):
-            const scope_internals    = internals.get_scope(.global);
-            const instance_internals = scope_internals.instances.get(0);
-            _ = instance_internals;
-
-
-            for (render_data.meshes.as_slice(), 0..) |mesh, idx| {
-                const offsets = [_]vk.DeviceSize{0};
-                const vertex_buffers = [_]vk.Buffer {self.get_buffer(mesh.internals.vertex_buffer_h).buf};
-                const index_buffer = self.get_buffer(mesh.internals.index_buffer_h).buf;
-                const index_count = @intCast(u32, mesh.indices.len);
-                _ = index_count;
-
-                self.vkd.cmdBindVertexBuffers(command_buffer, 0, 1, &vertex_buffers, &offsets);
-                self.vkd.cmdBindIndexBuffer  (command_buffer, index_buffer, 0, to_vk_index_type(Mesh.IndexType));
-
-                self.shader_set_object_idx(internals, idx);
-
-                for (mesh.sub_meshes.as_slice()) |sub_mesh| {
-                    // @Todo: bind material used by sub-mesh
-
-                    // self.vkd.cmdDrawIndexed(command_buffer, index_count, 1, 0, 0, 0);
-                    const instance_count = 1;
-                    const vertex_offset  = 0;
-                    const first_instance = 0;
-                    self.vkd.cmdDrawIndexed(
-                        command_buffer,
-                        @intCast(u32, sub_mesh.index_count),
-                        instance_count,
-                        @intCast(u32, sub_mesh.first_index),
-                        vertex_offset,
-                        first_instance);
-                }
-            }
-        }
-        self.vkd.cmdEndRenderPass(command_buffer);
-
-        try self.vkd.endCommandBuffer(command_buffer);
-    }
-
-    fn create_sync_objects(self: *Self) !void {
-        self.image_available_semaphores = try self.allocator.alloc(vk.Semaphore, CFG.MAX_FRAMES_IN_FLIGHT);
-        self.render_finished_semaphores = try self.allocator.alloc(vk.Semaphore, CFG.MAX_FRAMES_IN_FLIGHT);
-        self.in_flight_fences = try self.allocator.alloc(vk.Fence, CFG.MAX_FRAMES_IN_FLIGHT);
-
-        var i: usize = 0;
-        while (i < CFG.MAX_FRAMES_IN_FLIGHT) : (i += 1) {
-            self.image_available_semaphores.?[i] = try self.vkd.createSemaphore(self.device, &.{ .flags = .{} }, null);
-            self.render_finished_semaphores.?[i] = try self.vkd.createSemaphore(self.device, &.{ .flags = .{} }, null);
-            self.in_flight_fences.?[i] = try self.vkd.createFence(self.device, &.{ .flags = .{ .signaled_bit = true } }, null);
+            // const scope_internals    = internals.get_scope(.global);
+            // const instance_internals = scope_internals.instances.get(0);
+            // _ = instance_internals;
         }
     }
 
-    pub fn draw_render_data(self: *Self, render_data: *const RenderData, info: *const ShaderInfo, internals: *ShaderInternals) !void {
-        _ = try self.vkd.waitForFences(self.device, 1, @ptrCast([*]const vk.Fence, &self.in_flight_fences.?[self.current_frame]), vk.TRUE, std.math.maxInt(u64));
+    pub fn upload_shader_data(self: *Self, internals: *ShaderInternals, mesh: *const Mesh, obj_idx: usize) !void {
+        const command_buffer = self.command_buffers.?[self.current_frame];
 
-        const result = self.vkd.acquireNextImageKHR(self.device, self.swap_chain, std.math.maxInt(u64), self.image_available_semaphores.?[self.current_frame], .null_handle) catch |err| switch (err) {
-            error.OutOfDateKHR => {
+        const offsets = [_]vk.DeviceSize{0};
+        const vertex_buffers = [_]vk.Buffer {self.get_buffer(mesh.internals.vertex_buffer_h).buf};
+        const index_buffer = self.get_buffer(mesh.internals.index_buffer_h).buf;
+        const index_count = @intCast(u32, mesh.indices.len);
+        _ = index_count;
+
+        self.vkd.cmdBindVertexBuffers(command_buffer, 0, 1, &vertex_buffers, &offsets);
+        self.vkd.cmdBindIndexBuffer  (command_buffer, index_buffer, 0, to_vk_index_type(Mesh.IndexType));
+
+        self.shader_set_object_idx(internals, obj_idx);
+    }
+
+    /// draw a single mesh
+    pub fn draw_mesh(self: *Self, sub_mesh: *const SubMesh) !void {
+        const command_buffer = self.command_buffers.?[self.current_frame];
+
+        const instance_count = 1;
+        const vertex_offset  = 0;
+        const first_instance = 0;
+        self.vkd.cmdDrawIndexed(
+            command_buffer,
+            @intCast(u32, sub_mesh.index_count),
+            instance_count,
+            @intCast(u32, sub_mesh.first_index),
+            vertex_offset,
+            first_instance);
+    }
+
+    pub fn submit_render_pass(self: *Self) !void {
+        {
+            const command_buffer = self.command_buffers.?[self.current_frame];
+
+            self.vkd.cmdEndRenderPass(command_buffer);
+            try self.vkd.endCommandBuffer(command_buffer);
+        }
+
+        {
+            const wait_semaphores = [_]vk.Semaphore{self.image_available_semaphores.?[self.current_frame]};
+            const wait_stages = [_]vk.PipelineStageFlags{.{ .color_attachment_output_bit = true }};
+            const signal_semaphores = [_]vk.Semaphore{self.render_finished_semaphores.?[self.current_frame]};
+
+            const submit_info = vk.SubmitInfo{
+                .wait_semaphore_count = wait_semaphores.len,
+                .p_wait_semaphores = &wait_semaphores,
+                .p_wait_dst_stage_mask = &wait_stages,
+                .command_buffer_count = 1,
+                .p_command_buffers = @ptrCast([*]const vk.CommandBuffer, &self.command_buffers.?[self.current_frame]),
+                .signal_semaphore_count = signal_semaphores.len,
+                .p_signal_semaphores = &signal_semaphores,
+            };
+            _ = try self.vkd.queueSubmit(self.graphics_queue, 1, &[_]vk.SubmitInfo{submit_info}, self.in_flight_fences.?[self.current_frame]);
+
+            const present_result = self.vkd.queuePresentKHR(self.present_queue, &.{
+                .wait_semaphore_count = signal_semaphores.len,
+                .p_wait_semaphores = @ptrCast([*]const vk.Semaphore, &signal_semaphores),
+                .swapchain_count = 1,
+                .p_swapchains = @ptrCast([*]const vk.SwapchainKHR, &self.swap_chain),
+                .p_image_indices = @ptrCast([*]const u32, &self.curr_image_index),
+                .p_results = null,
+            }) catch |err| switch (err) {
+                error.OutOfDateKHR => vk.Result.error_out_of_date_khr,
+                else => return err,
+            };
+
+            if (present_result == .error_out_of_date_khr or present_result == .suboptimal_khr or self.window.framebuffer_resized) {
+                self.window.framebuffer_resized = false;
                 try self.recreate_swap_chain();
-                return;
-            },
-            else => |e| return e,
-        };
+            } else if (present_result != .success) {
+                return error.ImagePresentFailed;
+            }
 
-        if (result.result != .success and result.result != .suboptimal_khr) {
-            return error.ImageAcquireFailed;
+            self.current_frame = (self.current_frame + 1) % CFG.MAX_FRAMES_IN_FLIGHT;
         }
-
-        try self.vkd.resetFences(self.device, 1, @ptrCast([*]const vk.Fence, &self.in_flight_fences.?[self.current_frame]));
-
-        try self.vkd.resetCommandBuffer(self.command_buffers.?[self.current_frame], .{});
-        try self.record_command_buffer(self.command_buffers.?[self.current_frame], result.image_index, render_data, info, internals);
-
-        const wait_semaphores = [_]vk.Semaphore{self.image_available_semaphores.?[self.current_frame]};
-        const wait_stages = [_]vk.PipelineStageFlags{.{ .color_attachment_output_bit = true }};
-        const signal_semaphores = [_]vk.Semaphore{self.render_finished_semaphores.?[self.current_frame]};
-
-        const submit_info = vk.SubmitInfo{
-            .wait_semaphore_count = wait_semaphores.len,
-            .p_wait_semaphores = &wait_semaphores,
-            .p_wait_dst_stage_mask = &wait_stages,
-            .command_buffer_count = 1,
-            .p_command_buffers = @ptrCast([*]const vk.CommandBuffer, &self.command_buffers.?[self.current_frame]),
-            .signal_semaphore_count = signal_semaphores.len,
-            .p_signal_semaphores = &signal_semaphores,
-        };
-        _ = try self.vkd.queueSubmit(self.graphics_queue, 1, &[_]vk.SubmitInfo{submit_info}, self.in_flight_fences.?[self.current_frame]);
-
-        const present_result = self.vkd.queuePresentKHR(self.present_queue, &.{
-            .wait_semaphore_count = signal_semaphores.len,
-            .p_wait_semaphores = @ptrCast([*]const vk.Semaphore, &signal_semaphores),
-            .swapchain_count = 1,
-            .p_swapchains = @ptrCast([*]const vk.SwapchainKHR, &self.swap_chain),
-            .p_image_indices = @ptrCast([*]const u32, &result.image_index),
-            .p_results = null,
-        }) catch |err| switch (err) {
-            error.OutOfDateKHR => vk.Result.error_out_of_date_khr,
-            else => return err,
-        };
-
-        if (present_result == .error_out_of_date_khr or present_result == .suboptimal_khr or self.window.framebuffer_resized) {
-            self.window.framebuffer_resized = false;
-            try self.recreate_swap_chain();
-        } else if (present_result != .success) {
-            return error.ImagePresentFailed;
-        }
-
-        self.current_frame = (self.current_frame + 1) % CFG.MAX_FRAMES_IN_FLIGHT;
     }
 
     fn create_shader_module(self: *Self, code: []const u8) !vk.ShaderModule {

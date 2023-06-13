@@ -76,14 +76,29 @@ pub const Renderer = struct {
             Logger.debug("Timings - frame (us): {}\n", .{self.frame_timer.avg_frame_time_us()});
         }
 
-        // @Performance: order meshes in a useful way
+        // @Perf: order meshes in a useful way
         var render_data = RenderData {};
         for (meshes_h) |mesh_h| {
             render_data.meshes.push(self.get_mesh(mesh_h));
         }
 
+        // start frame
         self.frame_timer.start_frame();
-        try self.backend.draw_render_data(&render_data, &program.info, &program.internals);
+        try self.backend.start_render_pass(&program.info, &program.internals);
+
+        // iterate meshes
+        for (render_data.meshes.as_slice(), 0..) |mesh, idx| {
+            try self.backend.upload_shader_data(&program.internals, mesh, idx);
+
+            // iterate sub-meshes
+            // @Todo: bind material used by sub-mesh
+            for (mesh.sub_meshes.as_slice()) |sub_mesh| {
+                try self.backend.draw_mesh(&sub_mesh);
+            }
+        }
+
+        // end frame
+        try self.backend.submit_render_pass();
         self.frame_timer.stop_frame();
     }
 
