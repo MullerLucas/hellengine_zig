@@ -10,7 +10,7 @@ pub const ResourceHandle = struct {
 
     value: usize,
 
-    pub fn eql(self: *const ResourceHandle, other: *const ResourceHandle) bool {
+    pub fn eql(self: ResourceHandle, other: ResourceHandle) bool {
         return self.value == other.value;
     }
 

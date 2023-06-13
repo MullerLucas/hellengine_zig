@@ -56,8 +56,26 @@ pub const Texture = struct {
 // ----------------------------------------------
 
 pub const Material = struct {
+    pub const MaterialName = engine.core.StackArray(u8, 128);
+
+    name:     MaterialName,
     textures: [engine.config.max_uniform_samplers_per_instance]ResourceHandle = undefined,
     internals: backend_resources.MaterialInternals = .{}
+};
+
+// ----------------------------------------------
+
+// @Performance: think about using stack memory instead
+pub const Mesh = struct {
+    pub const IndexType = u32;
+    // @Todo: use sensible values
+    pub const sub_mesh_limit = 16;
+
+    vertices:   []Vertex,
+    indices:    []IndexType,
+    sub_meshes: engine.core.StackArray(SubMesh, sub_mesh_limit) = .{},
+
+    internals: backend_resources.MeshInternals = undefined,
 };
 
 // ----------------------------------------------
@@ -68,19 +86,7 @@ pub const SubMesh = struct {
     first_index: usize,
     /// index_count is the number of vertices to draw.
     index_count: usize,
+    /// material used by this submesh
+    material_h: ResourceHandle,
 };
 
-// ----------------------------------------------
-
-// @Performance: think about using stack memory instead
-pub const Mesh = struct {
-    pub const IndexType = u32;
-    // @Todo: use sensible value
-    pub const sub_mesh_limit = 16;
-
-    vertices:   []Vertex,
-    indices:    []IndexType,
-    sub_meshes: engine.core.StackArray(SubMesh, sub_mesh_limit) = .{},
-
-    internals: backend_resources.MeshInternals = undefined,
-};

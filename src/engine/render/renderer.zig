@@ -72,6 +72,8 @@ pub const Renderer = struct {
     }
 
     pub fn draw_meshes(self: *Renderer, meshes_h: []const ResourceHandle, program: *ShaderProgram) !void {
+        Logger.warn("draw\n", .{});
+
         if (self.frame_timer.is_frame_0()) {
             Logger.debug("Timings - frame (us): {}\n", .{self.frame_timer.avg_frame_time_us()});
         }
@@ -88,11 +90,18 @@ pub const Renderer = struct {
 
         // iterate meshes
         for (render_data.meshes.as_slice(), 0..) |mesh, idx| {
+            Logger.info("draw mesh\n", .{});
             try self.backend.upload_shader_data(&program.internals, mesh, idx);
 
             // iterate sub-meshes
             // @Todo: bind material used by sub-mesh
             for (mesh.sub_meshes.as_slice()) |sub_mesh| {
+                Logger.debug("draw sub-mesh: {}\n", .{sub_mesh.material_h.value});
+                // @Perf: don't switch materials on a per sub-mesh basis
+                const material = self.get_material(sub_mesh.material_h);
+                try self.backend.shader_apply_material(program, material);
+
+                // @Bug: There is a Bug if you try to render the materials in order 4 - 3 - 4
                 try self.backend.draw_mesh(&sub_mesh);
             }
         }
@@ -196,20 +205,22 @@ pub const Renderer = struct {
 
     // ------------------------------------------
 
-    pub fn create_material(self: *Renderer, program: *ShaderProgram) !ResourceHandle {
+    pub fn create_material(self: *Renderer, program: *ShaderProgram, material_name: []const u8, texture_path: [*:0]const u8) !ResourceHandle {
         const material_h = ResourceHandle { .value = self.materials.len };
         Logger.debug("creating material '{}'", .{material_h.value});
 
-        self.materials.push(Material { });
+        self.materials.push(Material {
+            .name = Material.MaterialName.from_slice(material_name),
+        });
         const material = self.get_material_mut(material_h);
 
         // @Hack
-        material.textures[0] = try self.create_texture("resources/texture_v1.jpg");
-        const texture = self.get_texture(material.textures[0]);
+        material.textures[0] = try self.create_texture(texture_path);
 
         try self.backend.create_material_internals(program, material, Renderer.get_default_material());
 
-        self.backend.shader_set_material_texture_image(&program.internals, &texture.internals);
+        const texture = self.get_texture(material.textures[0]);
+        self.backend.shader_set_material_texture_image(&program.internals, &material.internals, &texture.internals);
 
         return material_h;
     }
@@ -239,9 +250,13 @@ pub const Renderer = struct {
     }
 
     // @Todo: actually implement
-    pub fn find_material(self: *const Renderer, name: []const u8) ?ResourceHandle {
-        _ = self;
-        _ = name;
+    pub fn find_material(self: *const Renderer, material_name: []const u8) ?ResourceHandle {
+        for (self.materials.as_slice(), 0..) |material, idx| {
+            if (material.name.eql_slice(material_name)) {
+                // @Hack
+                return ResourceHandle { .value = idx };
+            }
+        }
         return null;
     }
 
@@ -299,7 +314,7 @@ pub const Renderer = struct {
 
         // parse obj-file
         {
-            var material_h = ResourceHandle.invalid;
+            var curr_material_h = ResourceHandle.invalid;
 
             while(try reader.readUntilDelimiterOrEof(&buffer, '\n')) |raw_line| {
                 const line = std.mem.trimLeft(u8, raw_line, " \t");
@@ -334,16 +349,16 @@ pub const Renderer = struct {
                 // faces
                 else if (std.mem.eql(u8, op, "f")) {
                     // @Todo: triangulate ngons
-                    const face_1 = try Renderer.parse_obj_face(splits.next().?, material_h);
-                    const face_2 = try Renderer.parse_obj_face(splits.next().?, material_h);
-                    const face_3 = try Renderer.parse_obj_face(splits.next().?, material_h);
+                    const face_1 = try Renderer.parse_obj_face(splits.next().?, curr_material_h);
+                    const face_2 = try Renderer.parse_obj_face(splits.next().?, curr_material_h);
+                    const face_3 = try Renderer.parse_obj_face(splits.next().?, curr_material_h);
                     try obj_faces.appendSlice(&[_]ObjFace {face_1, face_2, face_3});
                 }
                 // material uses
                 else if (std.mem.eql(u8, op, "usemtl")) {
                     const mat_name = splits.next().?;
                     if (self.find_material(mat_name)) |mh| {
-                        material_h = mh;
+                        curr_material_h = mh;
                     } else {
                         Logger.err("could not find material with name '{s}'\n", .{mat_name});
                     }
@@ -374,13 +389,35 @@ pub const Renderer = struct {
             defer face_index_map.deinit();
 
             var reused_count: usize = 0;
+            std.debug.assert(obj_faces.items.len > 0);
+            var curr_material_h: ResourceHandle = obj_faces.items[0].material_h;
+            var first_index: usize = 0;
+
+            var mesh = Mesh {
+                .vertices = undefined,
+                .indices  = undefined,
+            };
 
             for (obj_faces.items) |face| {
-                if (face_index_map.get(face)) |reused_idx| {
-                    try indices.append(reused_idx);
-                    reused_count += 1;
-                } else {
+                // if (face_index_map.get(face)) |reused_idx| {
+                //     try indices.append(reused_idx);
+                //     reused_count += 1;
+                // } else
+                {
                     const new_index = @intCast(u32, vertices.items.len);
+
+                    if (!face.material_h.eql(curr_material_h)) {
+                        std.debug.assert(curr_material_h.is_valid());
+
+                        mesh.sub_meshes.push(SubMesh {
+                            .first_index = first_index,
+                            .index_count = indices.items.len - first_index,
+                            .material_h = curr_material_h,
+                        });
+
+                        first_index     = indices.items.len;
+                        curr_material_h = face.material_h;
+                    }
 
                     // subtract 1 because obj indices start at 1
                     try vertices.append(Vertex {
@@ -394,18 +431,17 @@ pub const Renderer = struct {
                 }
             }
 
-            Logger.debug("reused '{}' indices\n", .{ reused_count });
-
-            var mesh = Mesh {
-                .vertices = try vertices.toOwnedSlice(),
-                .indices  = try indices.toOwnedSlice(),
-            };
-
-            // @Todo: actually implement
+            std.debug.assert(curr_material_h.is_valid());
             mesh.sub_meshes.push(SubMesh {
-                .first_index = 0,
-                .index_count = mesh.indices.len,
+                .first_index = first_index,
+                .index_count = indices.items.len - first_index,
+                .material_h  = curr_material_h,
             });
+
+            mesh.vertices = try vertices.toOwnedSlice();
+            mesh.indices  = try indices.toOwnedSlice();
+
+            Logger.debug("reused '{}' indices\n", .{ reused_count });
 
             return mesh;
         }

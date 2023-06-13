@@ -54,9 +54,9 @@ pub fn StackArray(comptime T: type, comptime capacity: usize) type {
             return &self.items_raw[idx];
         }
 
-        pub fn eq_slice(self: *const Self, other: []const T) bool {
+        pub fn eql_slice(self: *const Self, other: []const T) bool {
             if (self.len != other.len) return false;
-            return std.mem.eql(self.items_raw[0..self.len], other);
+            return std.mem.eql(u8, self.items_raw[0..self.len], other);
         }
     };
 }

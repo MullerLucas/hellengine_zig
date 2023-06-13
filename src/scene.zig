@@ -25,7 +25,7 @@ pub const TestScene = struct {
     renderer:    *Renderer,
     program:     *ShaderProgram    = undefined,
     meshes_h:    [1]ResourceHandle = undefined,
-    materials_h: [1]ResourceHandle = undefined,
+    materials_h: [64]ResourceHandle = undefined,
 
     pub fn init(allocator: std.mem.Allocator, renderer: *Renderer) !TestScene {
         Logger.info("initializing test-scene\n", .{});
@@ -64,12 +64,18 @@ pub const TestScene = struct {
             _ = try self.renderer.backend.shader_acquire_instance_resources(&self.program.info, &self.program.internals, .global, Renderer.get_default_material());
             _ = try self.renderer.backend.shader_acquire_instance_resources(&self.program.info, &self.program.internals, .scene,  Renderer.get_default_material());
 
-            self.materials_h[0] = try self.renderer.create_material(self.program);
+            self.materials_h[0] = try self.renderer.create_material(self.program, "test_mat_1", "resources/texture_v1.jpg");
+            self.materials_h[1] = try self.renderer.create_material(self.program, "test_mat_2", "resources/texture_v2.jpg");
+
+            self.materials_h[2] = try self.renderer.create_material(self.program, "Material", "resources/texture_v2.jpg");
+            self.materials_h[3] = try self.renderer.create_material(self.program, "Treads",   "resources/texture_v2.jpg");
+            self.materials_h[4] = try self.renderer.create_material(self.program, "Tank",     "resources/texture_v2.jpg");
         }
 
         // create meshes
         {
             self.meshes_h[0] = try self.renderer.create_mesh_from_file("art/simple_box.obj");
+            // self.meshes_h[0] = try self.renderer.create_mesh_from_file("art/tank.obj");
         }
 
         return self;

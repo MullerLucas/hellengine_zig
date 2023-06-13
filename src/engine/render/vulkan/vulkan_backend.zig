@@ -1775,9 +1775,9 @@ pub const VulkanBackend = struct {
         }
 
         // bind material scope (sampler)
-        {
-            try self.shader_apply_uniform_scope(.material, instance_h, info, internals);
-        }
+        // {
+        //     try self.shader_apply_uniform_scope(.material, instance_h, info, internals);
+        // }
     }
 
     // TODO(lm): think about what happens when this function is used at local scope
@@ -1815,8 +1815,14 @@ pub const VulkanBackend = struct {
     }
 
     // @Hack
-    pub fn shader_set_material_texture_image(self: *Self, shader_internals: *ShaderInternals, texture_internals: *const TextureInternals) void {
-        self.shader_bind_scope(shader_internals, .material, ResourceHandle.zero);
+    pub fn shader_set_material_texture_image(
+        self: *Self,
+        shader_internals: *ShaderInternals,
+        material_internals: *const MaterialInternals,
+        texture_internals: *const TextureInternals,
+    ) void {
+        self.shader_bind_scope(shader_internals, .material, material_internals.instance_h);
+        // @Hack
         self.shader_set_uniform_sampler(shader_internals, @ptrCast([*]const ResourceHandle, &texture_internals.image_h)[0..1]);
     }
 
@@ -1853,6 +1859,10 @@ pub const VulkanBackend = struct {
             buffer_mapping[start_index..end_index],
             std.mem.sliceAsBytes(value),
         );
+    }
+
+    pub fn shader_apply_material(self: *VulkanBackend, program: *ShaderProgram, material: *const Material) !void {
+        try self.shader_apply_uniform_scope(.material, material.internals.instance_h, &program.info, &program.internals);
     }
 
     /// updates and binds the specified descriptor sets
