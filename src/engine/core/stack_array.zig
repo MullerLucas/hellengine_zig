@@ -9,6 +9,17 @@ pub fn StackArray(comptime T: type, comptime capacity: usize) type {
         items_raw: [capacity]T = undefined,
         len: usize = 0,
 
+        pub fn from_slice(s: []const T) Self {
+            std.debug.assert(s.len <= capacity);
+
+            var self = Self {
+                .len = s.len,
+            };
+
+            @memcpy(self.items_raw[0..s.len], s);
+            return self;
+        }
+
         pub fn push(self: *Self, value: T) void {
             std.debug.assert(self.len < capacity);
             self.items_raw[self.len] = value;
@@ -41,6 +52,11 @@ pub fn StackArray(comptime T: type, comptime capacity: usize) type {
         pub fn get_mut(self: *Self, idx: usize) *T {
             std.debug.assert(self.len > idx);
             return &self.items_raw[idx];
+        }
+
+        pub fn eq_slice(self: *const Self, other: []const T) bool {
+            if (self.len != other.len) return false;
+            return std.mem.eql(self.items_raw[0..self.len], other);
         }
     };
 }
