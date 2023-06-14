@@ -26,6 +26,14 @@ pub fn StackArray(comptime T: type, comptime capacity: usize) type {
             self.len += 1;
         }
 
+        pub fn push_slice(self: *Self, other: []const T) void {
+            const new_len = self.len + other.len;
+            std.debug.assert(new_len <= capacity);
+
+            @memcpy(self.items_raw[self.len..new_len], other);
+            self.len += other.len;
+        }
+
         pub fn pop(self: *Self) T {
             std.debug.assert(self.len > 0);
             defer self.len -= 1;

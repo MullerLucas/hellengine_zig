@@ -25,7 +25,7 @@ pub const TestScene = struct {
     renderer:    *Renderer,
     program:     *ShaderProgram    = undefined,
     meshes_h:    [1]ResourceHandle = undefined,
-    materials_h: [64]ResourceHandle = undefined,
+    materials_h: [5]ResourceHandle = undefined,
 
     pub fn init(allocator: std.mem.Allocator, renderer: *Renderer) !TestScene {
         Logger.info("initializing test-scene\n", .{});
@@ -74,8 +74,8 @@ pub const TestScene = struct {
 
         // create meshes
         {
-            self.meshes_h[0] = try self.renderer.create_mesh_from_file("art/simple_box.obj");
-            // self.meshes_h[0] = try self.renderer.create_mesh_from_file("art/tank.obj");
+            // self.meshes_h[0] = try self.renderer.create_mesh_from_file("art/simple_box.obj");
+            self.meshes_h[0] = try self.renderer.create_mesh_from_file("art/tank.obj");
         }
 
         return self;

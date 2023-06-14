@@ -93,6 +93,7 @@ pub const Renderer = struct {
             Logger.info("draw mesh\n", .{});
             try self.backend.upload_shader_data(&program.internals, mesh, idx);
 
+            Logger.warn("test: {any}\n", .{mesh.sub_meshes.as_slice()});
             // iterate sub-meshes
             // @Todo: bind material used by sub-mesh
             for (mesh.sub_meshes.as_slice()) |sub_mesh| {
@@ -226,6 +227,7 @@ pub const Renderer = struct {
     }
 
     pub fn destroy_material(self: *Renderer, _: *ShaderProgram, material_h: ResourceHandle) void {
+        Logger.debug("destroying material '{}'\n", .{material_h.value});
         const material = self.get_material_mut(material_h);
         self.backend.destroy_material_internals(material);
         material.internals = undefined;
@@ -312,6 +314,9 @@ pub const Renderer = struct {
         var obj_faces = std.ArrayList(ObjFace).init(self.allocator);
         defer obj_faces .deinit();
 
+        var meshes = std.ArrayList(Mesh).init(self.allocator);
+        defer meshes.deinit();
+
         // parse obj-file
         {
             var curr_material_h = ResourceHandle.invalid;
@@ -381,70 +386,71 @@ pub const Renderer = struct {
             }
         }
 
-        // convert obj-data to mesh
+        return self.create_mesh_from_obj_data(obj_positions.items, obj_normals.items, obj_uvs.items, obj_faces.items);
+    }
+
+    fn create_mesh_from_obj_data(self: *const Renderer, obj_positions: [][3]f32, obj_normals: [][3]f32, obj_uvs: [][2]f32, obj_faces: []ObjFace) !Mesh {
+        var vertices = std.ArrayList(Vertex).init(self.allocator);
+        var indices  = try std.ArrayList(u32).initCapacity(self.allocator, obj_faces.len);
+        var face_index_map = std.AutoHashMap(ObjFace, u32).init(self.allocator);
+        defer face_index_map.deinit();
+
+        var reused_count: usize = 0;
+        std.debug.assert(obj_faces.len > 0);
+        var curr_material_h: ResourceHandle = obj_faces[0].material_h;
+        var first_index: usize = 0;
+
+        var mesh = Mesh {
+            .vertices = undefined,
+            .indices  = undefined,
+        };
+
+        for (obj_faces) |face| {
+            // if (face_index_map.get(face)) |reused_idx| {
+            //     try indices.append(reused_idx);
+            //     reused_count += 1;
+            // } else
         {
-            var vertices = std.ArrayList(Vertex).init(self.allocator);
-            var indices  = try std.ArrayList(u32).initCapacity(self.allocator, obj_faces.items.len);
-            var face_index_map = std.AutoHashMap(ObjFace, u32).init(self.allocator);
-            defer face_index_map.deinit();
+                const new_index = @intCast(u32, vertices.items.len);
 
-            var reused_count: usize = 0;
-            std.debug.assert(obj_faces.items.len > 0);
-            var curr_material_h: ResourceHandle = obj_faces.items[0].material_h;
-            var first_index: usize = 0;
+                if (!face.material_h.eql(curr_material_h)) {
+                    std.debug.assert(curr_material_h.is_valid());
 
-            var mesh = Mesh {
-                .vertices = undefined,
-                .indices  = undefined,
-            };
-
-            for (obj_faces.items) |face| {
-                // if (face_index_map.get(face)) |reused_idx| {
-                //     try indices.append(reused_idx);
-                //     reused_count += 1;
-                // } else
-                {
-                    const new_index = @intCast(u32, vertices.items.len);
-
-                    if (!face.material_h.eql(curr_material_h)) {
-                        std.debug.assert(curr_material_h.is_valid());
-
-                        mesh.sub_meshes.push(SubMesh {
-                            .first_index = first_index,
-                            .index_count = indices.items.len - first_index,
-                            .material_h = curr_material_h,
-                        });
-
-                        first_index     = indices.items.len;
-                        curr_material_h = face.material_h;
-                    }
-
-                    // subtract 1 because obj indices start at 1
-                    try vertices.append(Vertex {
-                        .position = obj_positions.items[face.position_offset - 1],
-                        .uv       = obj_uvs      .items[face.uv_offset       - 1],
-                        .normal   = obj_normals  .items[face.normal_offset   - 1],
+                    mesh.sub_meshes.push(SubMesh {
+                        .first_index = first_index,
+                        .index_count = indices.items.len - first_index,
+                        .material_h = curr_material_h,
                     });
 
-                    try face_index_map.put(face, new_index);
-                    try indices.append(new_index);
+                    first_index     = indices.items.len;
+                    curr_material_h = face.material_h;
                 }
+
+                // subtract 1 because obj indices start at 1
+                try vertices.append(Vertex {
+                    .position = obj_positions[face.position_offset - 1],
+                    .uv       = obj_uvs      [face.uv_offset       - 1],
+                    .normal   = obj_normals  [face.normal_offset   - 1],
+                });
+
+                try face_index_map.put(face, new_index);
+                try indices.append(new_index);
             }
-
-            std.debug.assert(curr_material_h.is_valid());
-            mesh.sub_meshes.push(SubMesh {
-                .first_index = first_index,
-                .index_count = indices.items.len - first_index,
-                .material_h  = curr_material_h,
-            });
-
-            mesh.vertices = try vertices.toOwnedSlice();
-            mesh.indices  = try indices.toOwnedSlice();
-
-            Logger.debug("reused '{}' indices\n", .{ reused_count });
-
-            return mesh;
         }
+
+        std.debug.assert(curr_material_h.is_valid());
+        mesh.sub_meshes.push(SubMesh {
+            .first_index = first_index,
+            .index_count = indices.items.len - first_index,
+            .material_h  = curr_material_h,
+        });
+
+        mesh.vertices = try vertices.toOwnedSlice();
+        mesh.indices  = try indices.toOwnedSlice();
+
+        Logger.debug("reused '{}' indices\n", .{ reused_count });
+
+        return mesh;
     }
 
     fn parse_obj_face(face_str: []const u8, material_h: ResourceHandle) !ObjFace {

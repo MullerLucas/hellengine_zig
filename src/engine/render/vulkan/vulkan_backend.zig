@@ -610,7 +610,7 @@ pub const VulkanBackend = struct {
     }
 
     pub fn destroy_texture_internals(self: *Self, texture: *Texture) void {
-        Logger.debug("destroy texture image internals", .{});
+        Logger.debug("destroy texture image internals\n", .{});
         self.free_image(texture.internals.image_h);
         texture.internals = undefined;
     }
@@ -1746,7 +1746,7 @@ pub const VulkanBackend = struct {
         const time: f32 = (@intToFloat(f32, (try std.time.Instant.now()).since(self.start_time)) / @intToFloat(f32, std.time.ns_per_s));
 
         var global_data = render.GlobalShaderData {
-            .view = za.lookAt(za.Vec3.new(2, 2, 2), za.Vec3.new(0, 0, 0), za.Vec3.new(0, 0, 1)),
+            .view = za.lookAt(za.Vec3.new(5, 5, 5), za.Vec3.new(0, 0, 0), za.Vec3.new(0, 0, 1)),
             .proj = za.perspective(45.0, @intToFloat(f32, self.swap_chain_extent.width) / @intToFloat(f32, self.swap_chain_extent.height), 0.1, 10),
         };
         global_data.proj.data[1][1] *= -1;
