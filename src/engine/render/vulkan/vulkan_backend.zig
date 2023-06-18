@@ -1886,8 +1886,6 @@ pub const VulkanBackend = struct {
         update_needed: bool,
     ) !void
     {
-        Logger.debug("apply uniform scope '{}' - '{}'\n", .{scope, instance_h});
-
         const scope_info         = &info.scopes[@enumToInt(scope)];
         const scope_internals    = &internals.scopes[@enumToInt(scope)];
         const instance_internals = scope_internals.instances.get(instance_h.value);

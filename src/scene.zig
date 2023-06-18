@@ -23,7 +23,7 @@ const za = @import("zalgebra");
 pub const TestScene = struct {
 
     renderer:    *Renderer,
-    program:     *ShaderProgram    = undefined,
+    program_h:   ResourceHandle = ResourceHandle.invalid,
     meshes_h:    core.StackArray(ResourceHandle, 64) = .{},
     materials_h: [5]ResourceHandle = undefined,
 
@@ -55,27 +55,29 @@ pub const TestScene = struct {
             // object
             try shader_info.add_uniform_buffer (allocator, .object, "object_idx", @sizeOf(usize));
 
-            self.program = try self.renderer.create_shader_program(shader_info);
+            self.program_h = try self.renderer.create_shader_program(shader_info);
         }
 
         // create materials
         {
-            // @Todo: handle differently
-            _ = try self.renderer.backend.shader_acquire_instance_resources(&self.program.info, &self.program.internals, .global, Renderer.get_default_material());
-            _ = try self.renderer.backend.shader_acquire_instance_resources(&self.program.info, &self.program.internals, .scene,  Renderer.get_default_material());
+            // @Hack
+            const program = self.renderer.get_shader_program_mut(self.program_h);
+            _ = try self.renderer.backend.shader_acquire_instance_resources(&program.info, &program.internals, .global, Renderer.get_default_material());
+            _ = try self.renderer.backend.shader_acquire_instance_resources(&program.info, &program.internals, .scene,  Renderer.get_default_material());
 
-            self.materials_h[0] = try self.renderer.create_material(self.program, "test_mat_1", "resources/texture_v1.jpg");
-            self.materials_h[1] = try self.renderer.create_material(self.program, "test_mat_2", "resources/texture_v2.jpg");
+            self.materials_h[0] = try self.renderer.create_material(self.program_h, "test_mat_1", "resources/texture_v1.jpg");
+            self.materials_h[1] = try self.renderer.create_material(self.program_h, "test_mat_2", "resources/texture_v2.jpg");
 
-            self.materials_h[2] = try self.renderer.create_material(self.program, "Black",  "resources/texture_v2.jpg");
-            self.materials_h[3] = try self.renderer.create_material(self.program, "Lights", "resources/texture_v2.jpg");
-            self.materials_h[4] = try self.renderer.create_material(self.program, "Green",  "resources/texture_v2.jpg");
+            self.materials_h[2] = try self.renderer.create_material(self.program_h, "Black",  "resources/texture_v2.jpg");
+            self.materials_h[3] = try self.renderer.create_material(self.program_h, "Lights", "resources/texture_v2.jpg");
+            self.materials_h[4] = try self.renderer.create_material(self.program_h, "Green",  "resources/texture_v2.jpg");
         }
 
         // create meshes
         {
             // const meshes_h = try self.renderer.create_meshes_from_file("art/tank.obj");
-            const meshes_h = try self.renderer.create_meshes_from_file("resources/green_tank.obj");
+            // const meshes_h = try self.renderer.create_meshes_from_file("resources/green_tank.obj");
+            const meshes_h = try self.renderer.create_meshes_from_file("resources/double_box.obj");
             defer meshes_h.deinit();
 
             for (meshes_h.items) |mesh_h| {
@@ -94,18 +96,17 @@ pub const TestScene = struct {
         }
 
         for (self.materials_h) |material_h| {
-            self.renderer.destroy_material(self.program, material_h);
+            self.renderer.destroy_material(material_h);
         }
 
-        self.renderer.destroy_shader_program(self.program);
-        self.program = undefined;
+        self.renderer.destroy_shader_program(self.program_h);
+        self.program_h = ResourceHandle.invalid;
     }
 
     pub fn render_scene(self: *const TestScene) !void {
-        Logger.info("render '{}\n' meshes", .{self.meshes_h.len});
-
         self.renderer.begin_frame();
-        try self.renderer.draw_meshes(self.meshes_h.as_slice(), self.program);
+        const program = self.renderer.get_shader_program_mut(self.program_h);
+        try self.renderer.draw_meshes(self.meshes_h.as_slice(), program);
         self.renderer.end_frame();
     }
 };

@@ -59,9 +59,10 @@ pub const Texture = struct {
 pub const Material = struct {
     pub const MaterialName = engine.core.StackArray(u8, 128);
 
-    name:     MaterialName,
-    textures: [engine.config.max_uniform_samplers_per_instance]ResourceHandle = undefined,
-    internals: backend_resources.MaterialInternals = .{},
+    name:       MaterialName,
+    program_h:  ResourceHandle,
+    textures_h: [engine.config.max_uniform_samplers_per_instance]ResourceHandle = undefined,
+    internals:  backend_resources.MaterialInternals = .{},
 
     frame_updated_at: FrameNumber = std.math.maxInt(FrameNumber),
 };

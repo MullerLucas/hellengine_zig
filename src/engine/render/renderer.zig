@@ -35,13 +35,15 @@ pub const Renderer = struct {
     const mesh_limit:     usize = 1024;
     const texture_limit:  usize = 1024;
     const material_limit: usize = 1024;
+    const program_limit:  usize = 1024;
 
     allocator: std.mem.Allocator,
     frame_timer: FrameTimer,
     backend: VulkanBackend,
-    meshes: core.StackArray(Mesh, mesh_limit) = .{},
-    textures: core.StackArray(Texture, texture_limit) = .{},
+    meshes:    core.StackArray(Mesh, mesh_limit) = .{},
+    textures:  core.StackArray(Texture, texture_limit) = .{},
     materials: core.StackArray(Material, material_limit) = .{},
+    programs:  core.StackArray(*ShaderProgram, program_limit) = .{},
 
     current_frame: usize = 0,
 
@@ -83,8 +85,6 @@ pub const Renderer = struct {
     }
 
     pub fn draw_meshes(self: *Renderer, meshes_h: []const ResourceHandle, program: *ShaderProgram) !void {
-        Logger.warn("draw\n", .{});
-
         if (self.frame_timer.is_frame_0()) {
             Logger.debug("Timings - frame (us): {}\n", .{self.frame_timer.avg_frame_time_us()});
         }
@@ -101,14 +101,11 @@ pub const Renderer = struct {
 
         // iterate meshes
         for (render_data.meshes.as_slice(), 0..) |mesh, idx| {
-            Logger.info("draw mesh\n", .{});
             try self.backend.upload_shader_data(&program.internals, mesh, idx);
 
-            Logger.warn("test: {any}\n", .{mesh.sub_meshes.as_slice()});
             // iterate sub-meshes
             // @Todo: bind material used by sub-mesh
             for (mesh.sub_meshes.as_slice()) |sub_mesh| {
-                Logger.debug("draw sub-mesh: {}\n", .{sub_mesh.material_h.value});
                 // @Perf: don't switch materials on a per sub-mesh basis
                 const material = self.get_material_mut(sub_mesh.material_h);
                 try self.backend.shader_apply_material(program, material, self.current_frame);
@@ -129,23 +126,35 @@ pub const Renderer = struct {
 
     // ------------------------------------------
 
-    pub fn create_shader_program(self: *Renderer, info: ShaderInfo) !*ShaderProgram {
-        Logger.debug("creating shader-program\n", .{});
+    pub fn create_shader_program(self: *Renderer, info: ShaderInfo) !ResourceHandle {
+        const program_h = ResourceHandle { .value = self.programs.len };
+        Logger.debug("creating shader-program '{}'\n", .{program_h.value});
 
         var program = try self.allocator.create(ShaderProgram);
         program.* = ShaderProgram {
             .info = info,
         };
+        self.programs.push(program);
 
         try self.backend.create_shader_internals(&info, &program.internals);
-        return program;
+        return program_h;
     }
 
-    pub fn destroy_shader_program(self: *Renderer, program: *ShaderProgram) void {
+    pub fn destroy_shader_program(self: *Renderer, program_h: ResourceHandle) void {
         Logger.debug("destroy shader-program\n", .{});
+
+        const program = self.get_shader_program_mut(program_h);
         self.backend.destroy_shader_internals(&program.internals);
         program.deinit();
         self.allocator.destroy(program);
+    }
+
+    pub fn get_shader_program(self: *const Renderer, program_h: ResourceHandle) *const ShaderProgram {
+        return self.programs.get(program_h.value).*;
+    }
+
+    pub fn get_shader_program_mut(self: *Renderer, program_h: ResourceHandle) *ShaderProgram {
+        return self.programs.get_mut(program_h.value).*;
     }
 
     // ------------------------------------------
@@ -217,27 +226,29 @@ pub const Renderer = struct {
 
     // ------------------------------------------
 
-    pub fn create_material(self: *Renderer, program: *ShaderProgram, material_name: []const u8, texture_path: [*:0]const u8) !ResourceHandle {
+    pub fn create_material(self: *Renderer, program_h: ResourceHandle, material_name: []const u8, texture_path: [*:0]const u8) !ResourceHandle {
         const material_h = ResourceHandle { .value = self.materials.len };
         Logger.debug("creating material '{}'", .{material_h.value});
 
         self.materials.push(Material {
-            .name = Material.MaterialName.from_slice(material_name),
+            .name      = Material.MaterialName.from_slice(material_name),
+            .program_h = program_h,
         });
         const material = self.get_material_mut(material_h);
 
         // @Hack
-        material.textures[0] = try self.create_texture(texture_path);
+        material.textures_h[0] = try self.create_texture(texture_path);
 
+        const program = self.get_shader_program_mut(program_h);
         try self.backend.create_material_internals(program, material, Renderer.get_default_material());
 
-        const texture = self.get_texture(material.textures[0]);
+        const texture = self.get_texture(material.textures_h[0]);
         self.backend.shader_set_material_texture_image(&program.internals, &material.internals, &texture.internals);
 
         return material_h;
     }
 
-    pub fn destroy_material(self: *Renderer, _: *ShaderProgram, material_h: ResourceHandle) void {
+    pub fn destroy_material(self: *Renderer, material_h: ResourceHandle) void {
         Logger.debug("destroying material '{}'\n", .{material_h.value});
         const material = self.get_material_mut(material_h);
         self.backend.destroy_material_internals(material);
