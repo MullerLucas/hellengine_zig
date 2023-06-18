@@ -24,6 +24,7 @@ const Mesh     = engine.resources.Mesh;
 const SubMesh  = engine.resources.SubMesh;
 const Vertex   = engine.resources.Vertex;
 const ObjFace  = engine.resources.files.ObjFace;
+const ObjParseState = engine.resources.files.ObjParseState;
 const Texture  = engine.resources.Texture;
 const Material = engine.resources.Material;
 
@@ -264,18 +265,27 @@ pub const Renderer = struct {
 
     // ------------------------------------------
 
-    pub fn create_mesh_from_file(self: *Renderer, mesh_path: []const u8) !ResourceHandle {
+    pub fn create_meshes_from_file(self: *Renderer, mesh_path: []const u8) !std.ArrayList(ResourceHandle) {
         Logger.debug("creating mesh '{}' from file '{s}'\n", .{self.meshes.len, mesh_path});
 
         const obj_file = try std.fs.cwd().openFile(mesh_path, .{});
         defer obj_file.close();
         var reader = std.io.bufferedReader(obj_file.reader());
 
-        var mesh = try self.parse_obj_file(reader.reader());
-        try self.backend.create_mesh_internals(&mesh);
+        // @Perf:
+        var meshes = try self.parse_obj_file(reader.reader());
+        defer meshes.deinit();
+        var meshes_h = try std.ArrayList(ResourceHandle).initCapacity(self.allocator, meshes.items.len);
 
-        self.meshes.push(mesh);
-        return ResourceHandle { .value = self.meshes.len - 1 };
+        for (0..meshes.items.len) |idx| {
+            Logger.warn("i: {}\n", .{idx});
+            var mesh = meshes.items[idx];
+            try self.backend.create_mesh_internals(&mesh);
+            self.meshes.push(mesh);
+            try meshes_h.append(ResourceHandle { .value = self.meshes.len - 1 });
+        }
+
+        return meshes_h;
     }
 
     pub fn destroy_mesh(self: *Renderer, mesh_h: ResourceHandle) void {
@@ -297,107 +307,116 @@ pub const Renderer = struct {
 
     // ------------------------------------------
 
-    pub fn parse_obj_file(self: *const Renderer, reader: anytype) !Mesh {
+    // @Perf:
+    pub fn parse_obj_file(self: *const Renderer, reader: anytype) !std.ArrayList(Mesh) {
         Logger.info("parsing obj file\n", .{});
 
         var buffer: [1024]u8 = undefined;
 
-        var obj_positions = std.ArrayList([3]f32).init(self.allocator);
-        defer obj_positions.deinit();
-
-        var obj_normals = std.ArrayList([3]f32).init(self.allocator);
-        defer obj_normals.deinit();
-
-        var obj_uvs = std.ArrayList([2]f32).init(self.allocator);
-        defer obj_uvs .deinit();
-
-        var obj_faces = std.ArrayList(ObjFace).init(self.allocator);
-        defer obj_faces .deinit();
+        var state = ObjParseState.init(self.allocator, 0, 0, 0);
+        defer state.deinit();
 
         var meshes = std.ArrayList(Mesh).init(self.allocator);
-        defer meshes.deinit();
+        // defer meshes.deinit();
 
-        // parse obj-file
-        {
-            var curr_material_h = ResourceHandle.invalid;
-
-            while(try reader.readUntilDelimiterOrEof(&buffer, '\n')) |raw_line| {
-                const line = std.mem.trimLeft(u8, raw_line, " \t");
-                // Logger.debug("parsing line '{s}'\n", .{line});
-
-                if (line[0] == '#') { continue; }
-
-                var splits = std.mem.tokenize(u8, line, " ");
-                const op = splits.next().?;
+        var curr_material_h = ResourceHandle.invalid;
 
 
-                // positions coordinates
-                if (std.mem.eql(u8, op, "v")) {
-                    const x = try std.fmt.parseFloat(f32, splits.next().?);
-                    const y = try std.fmt.parseFloat(f32, splits.next().?);
-                    const z = try std.fmt.parseFloat(f32, splits.next().?);
-                    try obj_positions.append([_]f32 { x, y, z });
+
+        while(try reader.readUntilDelimiterOrEof(&buffer, '\n')) |raw_line| {
+            const line = std.mem.trimLeft(u8, raw_line, " \t");
+
+            if (line[0] == '#') { continue; }
+
+            var splits = std.mem.tokenize(u8, line, " ");
+            const op = splits.next().?;
+
+            // named objects
+            if (std.mem.eql(u8, op, "o")) {
+                Logger.debug("parsing o - '{s}'\n", .{splits.next().?});
+
+                // if this is not the first object, create a mesh from the current state
+                if (state.positions.items.len > 0) {
+                    try meshes.append(try self.create_mesh_from_obj_data(&state));
+                    state = ObjParseState.init(
+                        self.allocator,
+                        state.positions.items.len,
+                        state.normals.items.len,
+                        state.uvs.items.len);
                 }
-                // texture coordinates
-                else if (std.mem.eql(u8, op, "vt")) {
-                    const x = try std.fmt.parseFloat(f32, splits.next().?);
-                    const y = try std.fmt.parseFloat(f32, splits.next().?);
-                    try obj_uvs.append([_]f32 { x, y });
+            }
+            // polygon groups
+            else if (std.mem.eql(u8, op, "g")) {
+                Logger.warn("polygon groups 'g' in obj-files are not supported and will be ignored\n", .{});
+                continue;
+            }
+            else if (std.mem.eql(u8, op, "s")) {
+                Logger.warn("smooth-shading 's' in obj-files are not supported and will be ignored\n", .{});
+                continue;
+            }
+            // positions coordinates
+            else if (std.mem.eql(u8, op, "v")) {
+                const x = try std.fmt.parseFloat(f32, splits.next().?);
+                const y = try std.fmt.parseFloat(f32, splits.next().?);
+                const z = try std.fmt.parseFloat(f32, splits.next().?);
+                try state.positions.append([_]f32 { x, y, z });
+            }
+            // texture coordinates
+            else if (std.mem.eql(u8, op, "vt")) {
+                const x = try std.fmt.parseFloat(f32, splits.next().?);
+                const y = try std.fmt.parseFloat(f32, splits.next().?);
+                try state.uvs.append([_]f32 { x, y });
+            }
+            // normals
+            else if (std.mem.eql(u8, op, "vn")) {
+                const x = try std.fmt.parseFloat(f32, splits.next().?);
+                const y = try std.fmt.parseFloat(f32, splits.next().?);
+                const z = try std.fmt.parseFloat(f32, splits.next().?);
+                try state.normals.append([_]f32 { x, y, z });
+            }
+            // faces
+            else if (std.mem.eql(u8, op, "f")) {
+                // @Todo: triangulate ngons
+                const face_1 = try Renderer.parse_obj_face(splits.next().?, curr_material_h);
+                const face_2 = try Renderer.parse_obj_face(splits.next().?, curr_material_h);
+                const face_3 = try Renderer.parse_obj_face(splits.next().?, curr_material_h);
+                try state.faces.appendSlice(&[_]ObjFace {face_1, face_2, face_3});
+            }
+            // material uses
+            else if (std.mem.eql(u8, op, "usemtl")) {
+                const mat_name = splits.next().?;
+                if (self.find_material(mat_name)) |mh| {
+                    curr_material_h = mh;
+                } else {
+                    Logger.err("could not find material with name '{s}'\n", .{mat_name});
                 }
-                // normals
-                else if (std.mem.eql(u8, op, "vn")) {
-                    const x = try std.fmt.parseFloat(f32, splits.next().?);
-                    const y = try std.fmt.parseFloat(f32, splits.next().?);
-                    const z = try std.fmt.parseFloat(f32, splits.next().?);
-                    try obj_normals.append([_]f32 { x, y, z });
-                }
-                // faces
-                else if (std.mem.eql(u8, op, "f")) {
-                    // @Todo: triangulate ngons
-                    const face_1 = try Renderer.parse_obj_face(splits.next().?, curr_material_h);
-                    const face_2 = try Renderer.parse_obj_face(splits.next().?, curr_material_h);
-                    const face_3 = try Renderer.parse_obj_face(splits.next().?, curr_material_h);
-                    try obj_faces.appendSlice(&[_]ObjFace {face_1, face_2, face_3});
-                }
-                // material uses
-                else if (std.mem.eql(u8, op, "usemtl")) {
-                    const mat_name = splits.next().?;
-                    if (self.find_material(mat_name)) |mh| {
-                        curr_material_h = mh;
-                    } else {
-                        Logger.err("could not find material with name '{s}'\n", .{mat_name});
-                    }
-                }
-                // named objects
-                else if (std.mem.eql(u8, op, "o")) {
-                    Logger.err("@Todo: implement 'o' support\n", .{});
-                }
-                // polygon groups
-                else if (std.mem.eql(u8, op, "g")) {
-                    Logger.warn("polygon groups 'g' in obj-files are not supported and will be ignored\n", .{});
-                }
-                else if (std.mem.eql(u8, op, "s")) {
-                    Logger.warn("smooth-shading 's' in obj-files are not supported and will be ignored\n", .{});
-                }
-                else {
-                    Logger.warn("ignoring unknown operation in obj-file '{s}'\n", .{op});
-                    continue;
-                }
+            }
+            else {
+                Logger.warn("ignoring unknown operation in obj-file '{s}'\n", .{op});
+                continue;
             }
         }
 
-        return self.create_mesh_from_obj_data(obj_positions.items, obj_normals.items, obj_uvs.items, obj_faces.items);
+        // create a mesh from the current state
+        if (state.positions.items.len > 0) {
+            try meshes.append(try self.create_mesh_from_obj_data(&state));
+        }
+
+        std.debug.assert(meshes.items.len > 0);
+        Logger.info("created '{}' meshes\n {}\n", .{meshes.items.len, meshes});
+
+        return meshes;
     }
 
-    fn create_mesh_from_obj_data(self: *const Renderer, obj_positions: [][3]f32, obj_normals: [][3]f32, obj_uvs: [][2]f32, obj_faces: []ObjFace) !Mesh {
+    fn create_mesh_from_obj_data(self: *const Renderer, state: *ObjParseState) !Mesh {
         var vertices = std.ArrayList(Vertex).init(self.allocator);
-        var indices  = try std.ArrayList(u32).initCapacity(self.allocator, obj_faces.len);
+        var indices  = try std.ArrayList(u32).initCapacity(self.allocator, state.faces.items.len);
         var face_index_map = std.AutoHashMap(ObjFace, u32).init(self.allocator);
         defer face_index_map.deinit();
 
         var reused_count: usize = 0;
-        std.debug.assert(obj_faces.len > 0);
-        var curr_material_h: ResourceHandle = obj_faces[0].material_h;
+        std.debug.assert(state.faces.items.len > 0);
+        var curr_material_h: ResourceHandle = state.faces.items[0].material_h;
         var first_index: usize = 0;
 
         var mesh = Mesh {
@@ -405,7 +424,8 @@ pub const Renderer = struct {
             .indices  = undefined,
         };
 
-        for (obj_faces) |face| {
+        for (state.faces.items) |face| {
+            // @Perf: fix hashing to filter out reused indices
             // if (face_index_map.get(face)) |reused_idx| {
             //     try indices.append(reused_idx);
             //     reused_count += 1;
@@ -428,9 +448,9 @@ pub const Renderer = struct {
 
                 // subtract 1 because obj indices start at 1
                 try vertices.append(Vertex {
-                    .position = obj_positions[face.position_offset - 1],
-                    .uv       = obj_uvs      [face.uv_offset       - 1],
-                    .normal   = obj_normals  [face.normal_offset   - 1],
+                    .position = state.positions.items[face.position_offset - 1 - state.position_first_idx],
+                    .normal   = state.normals  .items[face.normal_offset   - 1 - state.normals_first_idx ],
+                    .uv       = state.uvs      .items[face.uv_offset       - 1 - state.uvs_first_idx     ],
                 });
 
                 try face_index_map.put(face, new_index);

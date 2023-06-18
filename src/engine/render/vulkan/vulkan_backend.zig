@@ -1745,9 +1745,15 @@ pub const VulkanBackend = struct {
     fn update_shader_uniform_buffer(self: *Self, info: *const ShaderInfo, internals: *ShaderInternals) !void {
         const time: f32 = (@intToFloat(f32, (try std.time.Instant.now()).since(self.start_time)) / @intToFloat(f32, std.time.ns_per_s));
 
+        const near_distance = 0.1;
+        const far_distance = 50.0;
         var global_data = render.GlobalShaderData {
             .view = za.lookAt(za.Vec3.new(5, 5, 5), za.Vec3.new(0, 0, 0), za.Vec3.new(0, 0, 1)),
-            .proj = za.perspective(45.0, @intToFloat(f32, self.swap_chain_extent.width) / @intToFloat(f32, self.swap_chain_extent.height), 0.1, 10),
+            .proj = za.perspective(
+                45.0,
+                @intToFloat(f32, self.swap_chain_extent.width) / @intToFloat(f32, self.swap_chain_extent.height),
+                near_distance,
+                far_distance),
         };
         global_data.proj.data[1][1] *= -1;
 

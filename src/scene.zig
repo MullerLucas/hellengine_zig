@@ -24,7 +24,7 @@ pub const TestScene = struct {
 
     renderer:    *Renderer,
     program:     *ShaderProgram    = undefined,
-    meshes_h:    [1]ResourceHandle = undefined,
+    meshes_h:    core.StackArray(ResourceHandle, 64) = .{},
     materials_h: [5]ResourceHandle = undefined,
 
     pub fn init(allocator: std.mem.Allocator, renderer: *Renderer) !TestScene {
@@ -74,8 +74,12 @@ pub const TestScene = struct {
 
         // create meshes
         {
-            // self.meshes_h[0] = try self.renderer.create_mesh_from_file("art/simple_box.obj");
-            self.meshes_h[0] = try self.renderer.create_mesh_from_file("art/tank.obj");
+            const meshes_h = try self.renderer.create_meshes_from_file("art/tank.obj");
+            defer meshes_h.deinit();
+
+            for (meshes_h.items) |mesh_h| {
+                self.meshes_h.push(mesh_h);
+            }
         }
 
         return self;
@@ -84,7 +88,7 @@ pub const TestScene = struct {
     pub fn deinit(self: *TestScene) void {
         Logger.info("deinitializing test-scene\n", .{});
 
-        for (self.meshes_h) |mesh_h| {
+        for (self.meshes_h.as_slice()) |mesh_h| {
             self.renderer.destroy_mesh(mesh_h);
         }
 
@@ -97,7 +101,8 @@ pub const TestScene = struct {
     }
 
     pub fn render_scene(self: *const TestScene) !void {
-        try self.renderer.draw_meshes(self.meshes_h[0..], self.program);
+        Logger.info("render '{}\n' meshes", .{self.meshes_h.len});
+        try self.renderer.draw_meshes(self.meshes_h.as_slice(), self.program);
     }
 };
 
