@@ -67,14 +67,15 @@ pub const TestScene = struct {
             self.materials_h[0] = try self.renderer.create_material(self.program, "test_mat_1", "resources/texture_v1.jpg");
             self.materials_h[1] = try self.renderer.create_material(self.program, "test_mat_2", "resources/texture_v2.jpg");
 
-            self.materials_h[2] = try self.renderer.create_material(self.program, "Material", "resources/texture_v2.jpg");
-            self.materials_h[3] = try self.renderer.create_material(self.program, "Treads",   "resources/texture_v2.jpg");
-            self.materials_h[4] = try self.renderer.create_material(self.program, "Tank",     "resources/texture_v2.jpg");
+            self.materials_h[2] = try self.renderer.create_material(self.program, "Black",  "resources/texture_v2.jpg");
+            self.materials_h[3] = try self.renderer.create_material(self.program, "Lights", "resources/texture_v2.jpg");
+            self.materials_h[4] = try self.renderer.create_material(self.program, "Green",  "resources/texture_v2.jpg");
         }
 
         // create meshes
         {
-            const meshes_h = try self.renderer.create_meshes_from_file("art/tank.obj");
+            // const meshes_h = try self.renderer.create_meshes_from_file("art/tank.obj");
+            const meshes_h = try self.renderer.create_meshes_from_file("resources/green_tank.obj");
             defer meshes_h.deinit();
 
             for (meshes_h.items) |mesh_h| {
@@ -102,7 +103,10 @@ pub const TestScene = struct {
 
     pub fn render_scene(self: *const TestScene) !void {
         Logger.info("render '{}\n' meshes", .{self.meshes_h.len});
+
+        self.renderer.begin_frame();
         try self.renderer.draw_meshes(self.meshes_h.as_slice(), self.program);
+        self.renderer.end_frame();
     }
 };
 

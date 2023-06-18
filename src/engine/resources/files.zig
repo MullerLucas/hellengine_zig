@@ -57,4 +57,11 @@ pub const ObjParseState = struct {
         self.uvs.deinit();
         self.faces.deinit();
     }
+
+    pub fn clear(self: *ObjParseState) void {
+        self.positions.clearRetainingCapacity();
+        self.normals.clearRetainingCapacity();
+        self.uvs.clearRetainingCapacity();
+        self.faces.clearRetainingCapacity();
+    }
 };

@@ -15,6 +15,10 @@ const assert = std.debug.assert;
 
 // ----------------------------------------------
 
+pub const FrameNumber = usize;
+
+// ----------------------------------------------
+
 // TODO(lm): make sure that 'extern' makes sense
 pub const GlobalShaderData = extern struct {
     view:  za.Mat4 align(16),

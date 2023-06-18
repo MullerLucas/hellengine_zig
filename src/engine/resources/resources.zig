@@ -6,6 +6,7 @@ const ResourceHandle = engine.core.ResourceHandle;
 
 pub const files = @import("files.zig");
 pub const Logger = @import("../core/core.zig").log.scoped(.resources);
+pub const FrameNumber = engine.render.FrameNumber;
 
 
 // @Todo
@@ -60,7 +61,9 @@ pub const Material = struct {
 
     name:     MaterialName,
     textures: [engine.config.max_uniform_samplers_per_instance]ResourceHandle = undefined,
-    internals: backend_resources.MaterialInternals = .{}
+    internals: backend_resources.MaterialInternals = .{},
+
+    frame_updated_at: FrameNumber = std.math.maxInt(FrameNumber),
 };
 
 // ----------------------------------------------

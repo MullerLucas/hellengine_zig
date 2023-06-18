@@ -43,6 +43,8 @@ pub const Renderer = struct {
     textures: core.StackArray(Texture, texture_limit) = .{},
     materials: core.StackArray(Material, material_limit) = .{},
 
+    current_frame: usize = 0,
+
 
     pub fn init(allocator: std.mem.Allocator, window: *GlfwWindow) !Renderer {
         Logger.info("initializing renderer-frontend\n", .{});
@@ -70,6 +72,14 @@ pub const Renderer = struct {
         }
 
         self.backend.deinit();
+    }
+
+    pub fn begin_frame(self: *Renderer) void {
+        self.current_frame += 1;
+    }
+
+    pub fn end_frame(self: *Renderer) void {
+        _ = self;
     }
 
     pub fn draw_meshes(self: *Renderer, meshes_h: []const ResourceHandle, program: *ShaderProgram) !void {
@@ -100,8 +110,8 @@ pub const Renderer = struct {
             for (mesh.sub_meshes.as_slice()) |sub_mesh| {
                 Logger.debug("draw sub-mesh: {}\n", .{sub_mesh.material_h.value});
                 // @Perf: don't switch materials on a per sub-mesh basis
-                const material = self.get_material(sub_mesh.material_h);
-                try self.backend.shader_apply_material(program, material);
+                const material = self.get_material_mut(sub_mesh.material_h);
+                try self.backend.shader_apply_material(program, material, self.current_frame);
 
                 // @Bug: There is a Bug if you try to render the materials in order 4 - 3 - 4
                 try self.backend.draw_mesh(&sub_mesh);
@@ -338,11 +348,12 @@ pub const Renderer = struct {
                 // if this is not the first object, create a mesh from the current state
                 if (state.positions.items.len > 0) {
                     try meshes.append(try self.create_mesh_from_obj_data(&state));
-                    state = ObjParseState.init(
-                        self.allocator,
-                        state.positions.items.len,
-                        state.normals.items.len,
-                        state.uvs.items.len);
+
+                    // reset state
+                    state.position_first_idx = state.positions.items.len;
+                    state.normals_first_idx  = state.normals.items.len;
+                    state.uvs_first_idx      = state.uvs.items.len;
+                    state.clear();
                 }
             }
             // polygon groups
