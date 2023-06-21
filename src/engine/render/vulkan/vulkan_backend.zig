@@ -39,13 +39,13 @@ const ShaderInstanceInternals = vulkan.ShaderInstanceInternals;
 const PushConstantInternals = vulkan.PushConstantInternals;
 
 const Vertex   = engine.resources.Vertex;
-const Mesh     = engine.resources.Mesh;
-const SubMesh  = engine.resources.SubMesh;
+const Geometry = engine.resources.Geometry;
 const RawImage = engine.resources.RawImage;
 const Texture  = engine.resources.Texture;
 const Material = engine.resources.Material;
+const GeometryConfig = engine.resources.GeometryConfig;
 
-const MeshInternals     = vulkan.resources.MeshInternals;
+const GeometryInternals = vulkan.resources.GeometryInternals;
 const TextureInternals  = vulkan.resources.TextureInternals;
 const MaterialInternals = vulkan.resources.MaterialInternals;
 
@@ -809,8 +809,8 @@ pub const VulkanBackend = struct {
         return vertex_buffer_handle;
     }
 
-    pub fn create_index_buffer(self: *Self, indices: []const Mesh.IndexType) !ResourceHandle {
-        const buffer_size: vk.DeviceSize = @sizeOf(Mesh.IndexType) * indices.len;
+    pub fn create_index_buffer(self: *Self, indices: []const Geometry.IndexType) !ResourceHandle {
+        const buffer_size: vk.DeviceSize = @sizeOf(Geometry.IndexType) * indices.len;
         Logger.debug("creating index-buffer of size: {}\n", .{buffer_size});
 
         const staging_buffer_handle = try create_buffer(self, buffer_size, .{ .transfer_src_bit = true }, .{ .host_visible_bit = true, .host_coherent_bit = true });
@@ -1071,23 +1071,23 @@ pub const VulkanBackend = struct {
         }
     }
 
-    pub fn upload_shader_data(self: *Self, internals: *ShaderInternals, mesh: *const Mesh, obj_idx: usize) !void {
+    pub fn upload_shader_data(self: *Self, internals: *ShaderInternals, geometry: *const Geometry, obj_idx: usize) !void {
         const command_buffer = self.command_buffers.?[self.frame_in_flight_idx];
 
         const offsets = [_]vk.DeviceSize{0};
-        const vertex_buffers = [_]vk.Buffer {self.get_buffer(mesh.internals.vertex_buffer_h).buf};
-        const index_buffer = self.get_buffer(mesh.internals.index_buffer_h).buf;
-        const index_count = @intCast(u32, mesh.indices.len);
+        const vertex_buffers = [_]vk.Buffer {self.get_buffer(geometry.internals.vertex_buffer_h).buf};
+        const index_buffer = self.get_buffer(geometry.internals.index_buffer_h).buf;
+        const index_count = @intCast(u32, geometry.indices.len);
         _ = index_count;
 
         self.vkd.cmdBindVertexBuffers(command_buffer, 0, 1, &vertex_buffers, &offsets);
-        self.vkd.cmdBindIndexBuffer  (command_buffer, index_buffer, 0, to_vk_index_type(Mesh.IndexType));
+        self.vkd.cmdBindIndexBuffer  (command_buffer, index_buffer, 0, to_vk_index_type(Geometry.IndexType));
 
         self.shader_set_object_idx(internals, obj_idx);
     }
 
-    /// draw a single mesh
-    pub fn draw_mesh(self: *Self, sub_mesh: *const SubMesh) !void {
+    /// draw a single geometry
+    pub fn draw_geometry(self: *Self, geometry: *const Geometry) !void {
         const command_buffer = self.command_buffers.?[self.frame_in_flight_idx];
 
         const instance_count = 1;
@@ -1095,9 +1095,9 @@ pub const VulkanBackend = struct {
         const first_instance = 0;
         self.vkd.cmdDrawIndexed(
             command_buffer,
-            @intCast(u32, sub_mesh.index_count),
+            @intCast(u32, geometry.index_count),
             instance_count,
-            @intCast(u32, sub_mesh.first_index),
+            @intCast(u32, geometry.first_index),
             vertex_offset,
             first_instance);
     }
@@ -2024,15 +2024,15 @@ pub const VulkanBackend = struct {
 
     // ------------------------------------------
 
-    pub fn create_mesh_internals(self: *Self, mesh: *Mesh) !void {
-        mesh.internals.vertex_buffer_h = try self.create_vertex_buffer(mesh.vertices[0..]);
-        mesh.internals.index_buffer_h  = try self.create_index_buffer (mesh.indices[0..]);
+    pub fn create_geometry_internals(self: *Self, config: *const GeometryConfig, internals: *GeometryInternals) !void {
+        internals.vertex_buffer_h = try self.create_vertex_buffer(config.vertices[0..]);
+        internals.index_buffer_h  = try self.create_index_buffer (config.indices[0..]);
     }
 
-    pub fn destroy_mesh_internals(self: *Self, mesh: *Mesh) void {
-        self.free_buffer_h(mesh.internals.vertex_buffer_h);
-        self.free_buffer_h(mesh.internals.index_buffer_h);
-        mesh.internals = undefined;
+    pub fn destroy_geometry_internals(self: *Self, geometry: *Geometry) void {
+        self.free_buffer_h(geometry.internals.vertex_buffer_h);
+        self.free_buffer_h(geometry.internals.index_buffer_h);
+        geometry.internals = undefined;
     }
 
     // ------------------------------------------

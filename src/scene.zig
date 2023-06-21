@@ -3,8 +3,6 @@ const std = @import("std");
 const engine     = @import("engine/engine.zig");
 const render     = engine.render;
 const Renderer   = render.Renderer;
-const Mesh       = render.Mesh;
-const MeshList   = render.MeshList;
 const RenderData = render.RenderData;
 const Vertex     = render.Vertex;
 
@@ -65,19 +63,18 @@ pub const TestScene = struct {
             _ = try self.renderer.backend.shader_acquire_instance_resources(&program.info, &program.internals, .global, Renderer.get_default_material());
             _ = try self.renderer.backend.shader_acquire_instance_resources(&program.info, &program.internals, .scene,  Renderer.get_default_material());
 
-            self.materials_h[0] = try self.renderer.create_material(self.program_h, "test_mat_1", "resources/texture_v1.jpg");
-            self.materials_h[1] = try self.renderer.create_material(self.program_h, "test_mat_2", "resources/texture_v2.jpg");
+            self.materials_h[0] = try self.renderer.create_material(self.program_h, "test_mat_1", "resources/misc/texture_v1.jpg");
+            self.materials_h[1] = try self.renderer.create_material(self.program_h, "test_mat_2", "resources/misc/texture_v2.jpg");
 
-            self.materials_h[2] = try self.renderer.create_material(self.program_h, "Black",  "resources/texture_v2.jpg");
-            self.materials_h[3] = try self.renderer.create_material(self.program_h, "Lights", "resources/texture_v2.jpg");
-            self.materials_h[4] = try self.renderer.create_material(self.program_h, "Green",  "resources/texture_v2.jpg");
+            self.materials_h[2] = try self.renderer.create_material(self.program_h, "Black",  "resources/misc/texture_v2.jpg");
+            self.materials_h[3] = try self.renderer.create_material(self.program_h, "Lights", "resources/misc/texture_v2.jpg");
+            self.materials_h[4] = try self.renderer.create_material(self.program_h, "Green",  "resources/misc/texture_v2.jpg");
         }
 
         // create meshes
         {
-            // const meshes_h = try self.renderer.create_meshes_from_file("art/tank.obj");
-            // const meshes_h = try self.renderer.create_meshes_from_file("resources/green_tank.obj");
-            const meshes_h = try self.renderer.create_meshes_from_file("resources/double_box.obj");
+            // const meshes_h = try self.renderer.create_meshes_from_file("resources/double_box/double_box.obj");
+            const meshes_h = try self.renderer.create_geometries_from_file("resources/toy_tank/toy_tank.obj");
             defer meshes_h.deinit();
 
             for (meshes_h.items) |mesh_h| {
@@ -92,7 +89,7 @@ pub const TestScene = struct {
         Logger.info("deinitializing test-scene\n", .{});
 
         for (self.meshes_h.as_slice()) |mesh_h| {
-            self.renderer.destroy_mesh(mesh_h);
+            self.renderer.destroy_geometry(mesh_h);
         }
 
         for (self.materials_h) |material_h| {
@@ -106,7 +103,7 @@ pub const TestScene = struct {
     pub fn render_scene(self: *const TestScene) !void {
         self.renderer.begin_frame();
         const program = self.renderer.get_shader_program_mut(self.program_h);
-        try self.renderer.draw_meshes(self.meshes_h.as_slice(), program);
+        try self.renderer.draw_geometries(self.meshes_h.as_slice(), program);
         self.renderer.end_frame();
     }
 };

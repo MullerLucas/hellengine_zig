@@ -5,7 +5,7 @@ const core_types = @import("../core/core_types.zig");
 const ResourceHandle = core_types.ResourceHandle;
 
 const engine = @import("../../engine/engine.zig");
-const Mesh = engine.resources.Mesh;
+const Geometry = engine.resources.Geometry;
 
 const core = @import("../core/core.zig");
 const config = @import("../config.zig");
@@ -40,8 +40,8 @@ pub const SceneShaderData = extern struct {
 // ----------------------------------------------
 
 pub const RenderData = struct {
-    pub const mesh_limit: usize = 1024;
-    meshes: core.StackArray(*const Mesh, mesh_limit) = .{},
+    pub const geometry_limit: usize = 1024;
+    geometries: core.StackArray(*const Geometry, geometry_limit) = .{},
 };
 
 // ----------------------------------------------

@@ -20,30 +20,31 @@ const ShaderInfo = render.ShaderInfo;
 const ShaderScope = render.shader.ShaderScope;
 
 const engine = @import("../engine.zig");
-const Mesh     = engine.resources.Mesh;
-const SubMesh  = engine.resources.SubMesh;
 const Vertex   = engine.resources.Vertex;
-const ObjFace  = engine.resources.files.ObjFace;
-const ObjParseState = engine.resources.files.ObjParseState;
+const ObjFace  = engine.resources.obj_file.ObjFace;
+const ObjParseState = engine.resources.obj_file.ObjFileParseState;
 const Texture  = engine.resources.Texture;
 const Material = engine.resources.Material;
+const Geometry = engine.resources.Geometry;
+const GeometryConfig = engine.resources.GeometryConfig;
+const GeometryInternals = engine.render.vulkan.resources.GeometryInternals;
 
 // ----------------------------------------------
 
 pub const Renderer = struct {
     // @Todo: come up with sensible values
-    const mesh_limit:     usize = 1024;
+    const geometry_limit:     usize = 1024;
     const texture_limit:  usize = 1024;
     const material_limit: usize = 1024;
     const program_limit:  usize = 1024;
 
-    allocator: std.mem.Allocator,
+    allocator:   std.mem.Allocator,
     frame_timer: FrameTimer,
-    backend: VulkanBackend,
-    meshes:    core.StackArray(Mesh, mesh_limit) = .{},
-    textures:  core.StackArray(Texture, texture_limit) = .{},
-    materials: core.StackArray(Material, material_limit) = .{},
-    programs:  core.StackArray(*ShaderProgram, program_limit) = .{},
+    backend:     VulkanBackend,
+    geometries:  core.StackArray(Geometry, geometry_limit) = .{},
+    textures:    core.StackArray(Texture,  texture_limit) = .{},
+    materials:   core.StackArray(Material, material_limit) = .{},
+    programs:    core.StackArray(*ShaderProgram, program_limit) = .{},
 
     current_frame: usize = 0,
 
@@ -84,35 +85,30 @@ pub const Renderer = struct {
         _ = self;
     }
 
-    pub fn draw_meshes(self: *Renderer, meshes_h: []const ResourceHandle, program: *ShaderProgram) !void {
+    pub fn draw_geometries(self: *Renderer, geometries_h: []const ResourceHandle, program: *ShaderProgram) !void {
         if (self.frame_timer.is_frame_0()) {
             Logger.debug("Timings - frame (us): {}\n", .{self.frame_timer.avg_frame_time_us()});
         }
 
-        // @Perf: order meshes in a useful way
+        // @Perf: order geometries in a useful way
         var render_data = RenderData {};
-        for (meshes_h) |mesh_h| {
-            render_data.meshes.push(self.get_mesh(mesh_h));
+        for (geometries_h) |geometry_h| {
+            render_data.geometries.push(self.get_geometry(geometry_h));
         }
 
         // start frame
         self.frame_timer.start_frame();
         try self.backend.start_render_pass(&program.info, &program.internals);
 
-        // iterate meshes
-        for (render_data.meshes.as_slice(), 0..) |mesh, idx| {
-            try self.backend.upload_shader_data(&program.internals, mesh, idx);
+        // iterate geometries
+        for (render_data.geometries.as_slice(), 0..) |geometry, idx| {
+            try self.backend.upload_shader_data(&program.internals, geometry, idx);
 
-            // iterate sub-meshes
-            // @Todo: bind material used by sub-mesh
-            for (mesh.sub_meshes.as_slice()) |sub_mesh| {
-                // @Perf: don't switch materials on a per sub-mesh basis
-                const material = self.get_material_mut(sub_mesh.material_h);
-                try self.backend.shader_apply_material(program, material, self.current_frame);
+            // @Perf: don't switch materials on a per geometry basis
+            const material = self.get_material_mut(geometry.material_h);
+            try self.backend.shader_apply_material(program, material, self.current_frame);
 
-                // @Bug: There is a Bug if you try to render the materials in order 4 - 3 - 4
-                try self.backend.draw_mesh(&sub_mesh);
-            }
+            try self.backend.draw_geometry(geometry);
         }
 
         // end frame
@@ -286,227 +282,68 @@ pub const Renderer = struct {
 
     // ------------------------------------------
 
-    pub fn create_meshes_from_file(self: *Renderer, mesh_path: []const u8) !std.ArrayList(ResourceHandle) {
-        Logger.debug("creating mesh '{}' from file '{s}'\n", .{self.meshes.len, mesh_path});
+    pub fn create_geometries_from_file(self: *Renderer, path: []const u8) !std.ArrayList(ResourceHandle) {
+        Logger.debug("creating geometry '{}' from file '{s}'\n", .{self.geometries.len, path});
 
-        const obj_file = try std.fs.cwd().openFile(mesh_path, .{});
+        const obj_file = try std.fs.cwd().openFile(path, .{});
         defer obj_file.close();
         var reader = std.io.bufferedReader(obj_file.reader());
 
-        // @Perf:
-        var meshes = try self.parse_obj_file(reader.reader());
-        defer meshes.deinit();
-        var meshes_h = try std.ArrayList(ResourceHandle).initCapacity(self.allocator, meshes.items.len);
+        var configs = try engine.resources.obj_file.ObjFileLoader.parse_obj_file(self.allocator, reader.reader());
+        defer configs.deinit();
+        var geometries_h = try std.ArrayList(ResourceHandle).initCapacity(self.allocator, configs.items.len);
 
-        for (0..meshes.items.len) |idx| {
-            Logger.warn("i: {}\n", .{idx});
-            var mesh = meshes.items[idx];
-            try self.backend.create_mesh_internals(&mesh);
-            self.meshes.push(mesh);
-            try meshes_h.append(ResourceHandle { .value = self.meshes.len - 1 });
+        for (0..configs.items.len) |idx| {
+            var config = configs.items[idx];
+
+            try geometries_h.append(try self.create_geometry(&config));
         }
 
-        return meshes_h;
+        return geometries_h;
     }
 
-    pub fn destroy_mesh(self: *Renderer, mesh_h: ResourceHandle) void {
-        const mesh = self.get_mesh_mut(mesh_h);
+    pub fn create_geometry(self: *Renderer, config: *GeometryConfig) !ResourceHandle {
+        var internals = GeometryInternals { };
+        try self.backend.create_geometry_internals(config, &internals);
 
-        self.backend.destroy_mesh_internals(mesh);
+        var material_h = self.find_material(config.material_name_slice());
 
-        self.allocator.free(mesh.vertices);
-        self.allocator.free(mesh.indices);
-    }
-
-    pub fn get_mesh(self: *const Renderer, mesh_h: ResourceHandle) *const Mesh {
-        return self.meshes.get(mesh_h.value);
-    }
-
-    pub fn get_mesh_mut(self: *Renderer, mesh_h: ResourceHandle) *Mesh {
-        return self.meshes.get_mut(mesh_h.value);
-    }
-
-    // ------------------------------------------
-
-    // @Perf:
-    pub fn parse_obj_file(self: *const Renderer, reader: anytype) !std.ArrayList(Mesh) {
-        Logger.info("parsing obj file\n", .{});
-
-        var buffer: [1024]u8 = undefined;
-
-        var state = ObjParseState.init(self.allocator, 0, 0, 0);
-        defer state.deinit();
-
-        var meshes = std.ArrayList(Mesh).init(self.allocator);
-        // defer meshes.deinit();
-
-        var curr_material_h = ResourceHandle.invalid;
-
-
-
-        while(try reader.readUntilDelimiterOrEof(&buffer, '\n')) |raw_line| {
-            const line = std.mem.trimLeft(u8, raw_line, " \t");
-
-            if (line[0] == '#') { continue; }
-
-            var splits = std.mem.tokenize(u8, line, " ");
-            const op = splits.next().?;
-
-            // named objects
-            if (std.mem.eql(u8, op, "o")) {
-                Logger.debug("parsing o - '{s}'\n", .{splits.next().?});
-
-                // if this is not the first object, create a mesh from the current state
-                if (state.positions.items.len > 0) {
-                    try meshes.append(try self.create_mesh_from_obj_data(&state));
-
-                    // reset state
-                    state.position_first_idx = state.positions.items.len;
-                    state.normals_first_idx  = state.normals.items.len;
-                    state.uvs_first_idx      = state.uvs.items.len;
-                    state.clear();
-                }
-            }
-            // polygon groups
-            else if (std.mem.eql(u8, op, "g")) {
-                Logger.warn("polygon groups 'g' in obj-files are not supported and will be ignored\n", .{});
-                continue;
-            }
-            else if (std.mem.eql(u8, op, "s")) {
-                Logger.warn("smooth-shading 's' in obj-files are not supported and will be ignored\n", .{});
-                continue;
-            }
-            // positions coordinates
-            else if (std.mem.eql(u8, op, "v")) {
-                const x = try std.fmt.parseFloat(f32, splits.next().?);
-                const y = try std.fmt.parseFloat(f32, splits.next().?);
-                const z = try std.fmt.parseFloat(f32, splits.next().?);
-                try state.positions.append([_]f32 { x, y, z });
-            }
-            // texture coordinates
-            else if (std.mem.eql(u8, op, "vt")) {
-                const x = try std.fmt.parseFloat(f32, splits.next().?);
-                const y = try std.fmt.parseFloat(f32, splits.next().?);
-                try state.uvs.append([_]f32 { x, y });
-            }
-            // normals
-            else if (std.mem.eql(u8, op, "vn")) {
-                const x = try std.fmt.parseFloat(f32, splits.next().?);
-                const y = try std.fmt.parseFloat(f32, splits.next().?);
-                const z = try std.fmt.parseFloat(f32, splits.next().?);
-                try state.normals.append([_]f32 { x, y, z });
-            }
-            // faces
-            else if (std.mem.eql(u8, op, "f")) {
-                // @Todo: triangulate ngons
-                const face_1 = try Renderer.parse_obj_face(splits.next().?, curr_material_h);
-                const face_2 = try Renderer.parse_obj_face(splits.next().?, curr_material_h);
-                const face_3 = try Renderer.parse_obj_face(splits.next().?, curr_material_h);
-                try state.faces.appendSlice(&[_]ObjFace {face_1, face_2, face_3});
-            }
-            // material uses
-            else if (std.mem.eql(u8, op, "usemtl")) {
-                const mat_name = splits.next().?;
-                if (self.find_material(mat_name)) |mh| {
-                    curr_material_h = mh;
-                } else {
-                    Logger.err("could not find material with name '{s}'\n", .{mat_name});
-                }
-            }
-            else {
-                Logger.warn("ignoring unknown operation in obj-file '{s}'\n", .{op});
-                continue;
-            }
+        // @Todo
+        if (material_h == null) {
+            Logger.err("could not find material '{s}'\n", .{config.material_name_slice()});
+            material_h = Renderer.get_default_material();
         }
 
-        // create a mesh from the current state
-        if (state.positions.items.len > 0) {
-            try meshes.append(try self.create_mesh_from_obj_data(&state));
-        }
+        var geometry = Geometry {
+            .vertices = config.vertices,
+            .indices  = config.indices,
 
-        std.debug.assert(meshes.items.len > 0);
-        Logger.info("created '{}' meshes\n {}\n", .{meshes.items.len, meshes});
-
-        return meshes;
-    }
-
-    fn create_mesh_from_obj_data(self: *const Renderer, state: *ObjParseState) !Mesh {
-        var vertices = std.ArrayList(Vertex).init(self.allocator);
-        var indices  = try std.ArrayList(u32).initCapacity(self.allocator, state.faces.items.len);
-        var face_index_map = std.AutoHashMap(ObjFace, u32).init(self.allocator);
-        defer face_index_map.deinit();
-
-        var reused_count: usize = 0;
-        std.debug.assert(state.faces.items.len > 0);
-        var curr_material_h: ResourceHandle = state.faces.items[0].material_h;
-        var first_index: usize = 0;
-
-        var mesh = Mesh {
-            .vertices = undefined,
-            .indices  = undefined,
+            .first_index = 0,
+            .index_count = config.indices.len,
+            .material_h  = material_h.?,
+            .internals   = internals,
         };
 
-        for (state.faces.items) |face| {
-            // @Perf: fix hashing to filter out reused indices
-            // if (face_index_map.get(face)) |reused_idx| {
-            //     try indices.append(reused_idx);
-            //     reused_count += 1;
-            // } else
-        {
-                const new_index = @intCast(u32, vertices.items.len);
+        self.geometries.push(geometry);
 
-                if (!face.material_h.eql(curr_material_h)) {
-                    std.debug.assert(curr_material_h.is_valid());
-
-                    mesh.sub_meshes.push(SubMesh {
-                        .first_index = first_index,
-                        .index_count = indices.items.len - first_index,
-                        .material_h = curr_material_h,
-                    });
-
-                    first_index     = indices.items.len;
-                    curr_material_h = face.material_h;
-                }
-
-                // subtract 1 because obj indices start at 1
-                try vertices.append(Vertex {
-                    .position = state.positions.items[face.position_offset - 1 - state.position_first_idx],
-                    .normal   = state.normals  .items[face.normal_offset   - 1 - state.normals_first_idx ],
-                    .uv       = state.uvs      .items[face.uv_offset       - 1 - state.uvs_first_idx     ],
-                });
-
-                try face_index_map.put(face, new_index);
-                try indices.append(new_index);
-            }
-        }
-
-        std.debug.assert(curr_material_h.is_valid());
-        mesh.sub_meshes.push(SubMesh {
-            .first_index = first_index,
-            .index_count = indices.items.len - first_index,
-            .material_h  = curr_material_h,
-        });
-
-        mesh.vertices = try vertices.toOwnedSlice();
-        mesh.indices  = try indices.toOwnedSlice();
-
-        Logger.debug("reused '{}' indices\n", .{ reused_count });
-
-        return mesh;
+        return ResourceHandle { .value = self.geometries.len - 1 };
     }
 
-    fn parse_obj_face(face_str: []const u8, material_h: ResourceHandle) !ObjFace {
-        var split = std.mem.tokenize(u8, face_str, "/");
-        const position_offset = try std.fmt.parseInt(u32, split.next().?, 10);
-        const uv_offset       = try std.fmt.parseInt(u32, split.next().?, 10);
-        const normal_offset   = try std.fmt.parseInt(u32, split.next().?, 10);
+    pub fn destroy_geometry(self: *Renderer, geometry_h: ResourceHandle) void {
+        const geometry = self.get_geometry_mut(geometry_h);
 
-        return ObjFace {
-            .position_offset = position_offset,
-            .uv_offset       = uv_offset,
-            .normal_offset   = normal_offset,
-            .material_h      = material_h,
-        };
+        self.backend.destroy_geometry_internals(geometry);
+
+        self.allocator.free(geometry.vertices);
+        self.allocator.free(geometry.indices);
+    }
+
+    pub fn get_geometry(self: *const Renderer, geometry_h: ResourceHandle) *const Geometry{
+        return self.geometries.get(geometry_h.value);
+    }
+
+    pub fn get_geometry_mut(self: *Renderer, geometry_h: ResourceHandle) *Geometry{
+        return self.geometries.get_mut(geometry_h.value);
     }
 };
 

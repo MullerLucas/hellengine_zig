@@ -16,7 +16,7 @@ pub const MaterialInternals = struct {
 
 // ----------------------------------------------
 
-pub const MeshInternals = struct {
+pub const GeometryInternals = struct {
     vertex_buffer_h: ResourceHandle = ResourceHandle.invalid,
     index_buffer_h:  ResourceHandle = ResourceHandle.invalid,
 };
