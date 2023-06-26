@@ -6,6 +6,7 @@ const engine = @import("../engine.zig");
 const resources = @import("resources.zig");
 const Geometry = resources.Geometry;
 const GeometryConfig = resources.GeometryConfig;
+const MaterialConfig = resources.MaterialConfig;
 const Logger = resources.Logger;
 const Vertex = engine.resources.Vertex;
 
@@ -53,8 +54,46 @@ pub const ObjFileParseState = struct {
 
 // ----------------------------------------------------------------------------
 
+pub const ObjFileParseResult = struct {
+    pub const MatlibPath = engine.core.StackArray(u8, 512);
+    pub const GeometryConfigList = std.ArrayList(GeometryConfig);
+
+    geometry_configs: GeometryConfigList,
+    matlib_path:      ?MatlibPath = null,
+
+    pub fn init(allocator: std.mem.Allocator) ObjFileParseResult {
+        return ObjFileParseResult {
+            .geometry_configs = GeometryConfigList.init(allocator),
+            .matlib_path      = null,
+        };
+    }
+    pub fn deinit(self: *ObjFileParseResult) void {
+        self.geometry_configs.deinit();
+    }
+};
+
+// ----------------------------------------------------------------------------
+
+pub const ObjMaterialFileParseResult = struct {
+    pub const MaterialConfigList = std.ArrayList(MaterialConfig);
+
+    configs: MaterialConfigList,
+
+    pub fn init(allocator: std.mem.Allocator) ObjMaterialFileParseResult {
+        return ObjMaterialFileParseResult {
+            .configs = MaterialConfigList.init(allocator),
+        };
+    }
+
+    pub fn deinit(self: *ObjMaterialFileParseResult) void {
+        self.configs.deinit();
+    }
+};
+
+// ----------------------------------------------------------------------------
+
 pub const ObjFileLoader = struct {
-    pub fn parse_obj_file(allocator: std.mem.Allocator, reader: anytype) !std.ArrayList(GeometryConfig) {
+    pub fn parse_obj_file(allocator: std.mem.Allocator, reader: anytype, result: *ObjFileParseResult) !void {
         Logger.info("parsing obj file\n", .{});
 
         var line_buffer: [1024]u8 = undefined;
@@ -62,8 +101,7 @@ pub const ObjFileLoader = struct {
         var state = ObjFileParseState.init(allocator);
         defer state.deinit();
 
-        var geometry_configs = std.ArrayList(GeometryConfig).init(allocator);
-
+        // var geometry_configs = std.ArrayList(GeometryConfig).init(allocator);
 
         while(try reader.readUntilDelimiterOrEof(&line_buffer, '\n')) |raw_line| {
             const line = std.mem.trimLeft(u8, raw_line, " \t");
@@ -80,7 +118,7 @@ pub const ObjFileLoader = struct {
                 Logger.debug("[OBJ] group: '{s}'\n", .{group_name});
 
                 if (state.faces.items.len > 0) {
-                    try geometry_configs.append(try ObjFileLoader.create_geometry_config_from_group(&state));
+                    try result.geometry_configs.append(try ObjFileLoader.create_geometry_config_from_group(&state));
                     state.faces.clearRetainingCapacity();
                 }
             }
@@ -119,6 +157,11 @@ pub const ObjFileLoader = struct {
                 @memcpy(state.material_name[0..mat_name.len], mat_name);
                 state.material_name_len = mat_name.len;
             }
+            // material lib
+            else if (std.mem.eql(u8, op, "mtllib")) {
+                const mat_name = splits.next().?;
+                result.matlib_path = ObjFileParseResult.MatlibPath.from_slice(mat_name);
+            }
             else {
                 Logger.warn("ignoring unknown operation in obj-file '{s}'\n", .{op});
                 continue;
@@ -127,13 +170,11 @@ pub const ObjFileLoader = struct {
 
         // create a mesh from the current state
         if (state.positions.items.len > 0) {
-            try geometry_configs.append(try ObjFileLoader.create_geometry_config_from_group(&state));
+            try result.geometry_configs.append(try ObjFileLoader.create_geometry_config_from_group(&state));
         }
 
-        std.debug.assert(geometry_configs.items.len > 0);
-        Logger.info("read '{}' geometry configs from obj file\n", .{geometry_configs.items.len});
-
-        return geometry_configs;
+        std.debug.assert(result.geometry_configs.items.len > 0);
+        Logger.info("read '{}' geometry configs from obj file\n", .{result.geometry_configs.items.len});
     }
 
     fn parse_obj_face(face_str: []const u8) !ObjFace {
@@ -173,5 +214,124 @@ pub const ObjFileLoader = struct {
             .material_name = state.material_name,
             .material_name_len = state.material_name_len,
         };
+    }
+
+    pub fn parse_obj_material_file(allocator: std.mem.Allocator, reader: anytype, result: *ObjMaterialFileParseResult) !void {
+        Logger.info("parsing obj material file\n", .{});
+
+        var line_buffer: [1024]u8 = undefined;
+
+        var state = ObjFileParseState.init(allocator);
+        defer state.deinit();
+        var curr_config: ?*MaterialConfig = null;
+
+        while(try reader.readUntilDelimiterOrEof(&line_buffer, '\n')) |raw_line| {
+            const line = std.mem.trimLeft(u8, raw_line, " \t");
+
+            if (line.len == 0)  { continue; }
+            if (line[0] == '#') { continue; }
+
+            var splits = std.mem.tokenize(u8, line, " ");
+            const op = splits.next().?;
+
+            // new material
+            if (std.mem.eql(u8, op, "newmtl")) {
+                const mat_name = splits.next().?;
+                Logger.debug("[OBJ] newmtl: '{s}'\n", .{mat_name});
+
+                try result.configs.append(MaterialConfig {
+                    .name = MaterialConfig.MaterialName.from_slice(mat_name),
+                });
+                curr_config = &result.configs.items[result.configs.items.len - 1];
+            }
+            // ambient color
+            else if (std.mem.eql(u8, op, "Ka")) {
+                curr_config.?.ambient_color = .{
+                    try std.fmt.parseFloat(f32, splits.next().?),
+                    try std.fmt.parseFloat(f32, splits.next().?),
+                    try std.fmt.parseFloat(f32, splits.next().?),
+                };
+            }
+            // diffuse color
+            else if (std.mem.eql(u8, op, "Kd")) {
+                curr_config.?.diffuse_color = .{
+                    try std.fmt.parseFloat(f32, splits.next().?),
+                    try std.fmt.parseFloat(f32, splits.next().?),
+                    try std.fmt.parseFloat(f32, splits.next().?),
+                };
+            }
+            // specular color
+            else if (std.mem.eql(u8, op, "Ks")) {
+                curr_config.?.specular_color = .{
+                    try std.fmt.parseFloat(f32, splits.next().?),
+                    try std.fmt.parseFloat(f32, splits.next().?),
+                    try std.fmt.parseFloat(f32, splits.next().?),
+                };
+            }
+            // specular exponent
+            else if (std.mem.eql(u8, op, "Ns")) {
+                curr_config.?.specular_exponent = try std.fmt.parseFloat(f32, splits.next().?);
+            }
+            // dissolve
+            else if (std.mem.eql(u8, op, "d")) {
+                curr_config.?.alpha = try std.fmt.parseFloat(f32, splits.next().?);
+            }
+            // transparency
+            else if (std.mem.eql(u8, op, "Tr")) {
+                curr_config.?.alpha = 1.0 - try std.fmt.parseFloat(f32, splits.next().?);
+            }
+            // transmission filter
+            else if (std.mem.eql(u8, op, "Tf")) {
+                Logger.warn("Transmission filter 'Tf' are not supported", .{});
+            }
+            // optical density
+            else if (std.mem.eql(u8, op, "Ni")) {
+                curr_config.?.refraction_index = try std.fmt.parseFloat(f32, splits.next().?);
+            }
+            // illumination model
+            else if (std.mem.eql(u8, op, "illum")) {
+                const raw = try std.fmt.parseInt(u8, splits.next().?, 10);
+                curr_config.?.illumination_model = @intToEnum(engine.resources.IlluminationModel, raw);
+            }
+            // ambient color map
+            else if (std.mem.eql(u8, op, "map_Ka")) {
+                curr_config.?.ambient_color_map = MaterialConfig.MaterialName.from_slice(splits.next().?);
+            }
+            // diffuse color map
+            else if (std.mem.eql(u8, op, "map_Kd")) {
+                curr_config.?.diffuse_color_map  = MaterialConfig.MaterialName.from_slice(splits.next().?);
+            }
+            // specular color map
+            else if (std.mem.eql(u8, op, "map_Kd")) {
+                curr_config.?.specular_color_map = MaterialConfig.MaterialName.from_slice(splits.next().?);
+            }
+            // specular highlight map
+            else if (std.mem.eql(u8, op, "map_Ns")) {
+                curr_config.?.specular_highlight_map = MaterialConfig.MaterialName.from_slice(splits.next().?);
+            }
+            // disolve map
+            else if (std.mem.eql(u8, op, "map_d")) {
+                curr_config.?.alpha_map = MaterialConfig.MaterialName.from_slice(splits.next().?);
+            }
+            // bump map
+            else if (std.mem.eql(u8, op, "map_bump") or std.mem.eql(u8, op, "bump")) {
+                curr_config.?.bump_map = MaterialConfig.MaterialName.from_slice(splits.next().?);
+            }
+            // displacement map
+            else if (std.mem.eql(u8, op, "map_disp")) {
+                curr_config.?.displacement_map = MaterialConfig.MaterialName.from_slice(splits.next().?);
+            }
+            // decal map
+            else if (std.mem.eql(u8, op, "decal")) {
+                curr_config.?.stencil_decal_map = MaterialConfig.MaterialName.from_slice(splits.next().?);
+            }
+            else {
+                Logger.warn("ignoring unknown operation in obj-matlib-file '{s}'\n", .{op});
+                continue;
+            }
+        }
+
+        std.debug.assert(result.configs.items.len > 0);
+        Logger.info("read '{}' material configs from obj file\n", .{result.configs.items.len});
     }
 };

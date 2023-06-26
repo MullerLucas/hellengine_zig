@@ -73,8 +73,8 @@ pub const TestScene = struct {
 
         // create meshes
         {
-            // const meshes_h = try self.renderer.create_meshes_from_file("resources/double_box/double_box.obj");
-            const meshes_h = try self.renderer.create_geometries_from_file("resources/toy_tank/toy_tank.obj");
+            const meshes_h = try self.renderer.create_geometries_from_file("resources/double_box/double_box.obj");
+            // const meshes_h = try self.renderer.create_geometries_from_file("resources/toy_tank/toy_tank.obj");
             defer meshes_h.deinit();
 
             for (meshes_h.items) |mesh_h| {

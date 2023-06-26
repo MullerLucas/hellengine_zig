@@ -2,9 +2,10 @@ const std = @import("std");
 
 
 
-pub fn StackArray(comptime T: type, comptime capacity: usize) type {
+pub fn StackArray(comptime T: type, comptime capacity_init: usize) type {
     return struct {
         const Self = @This();
+        pub const capacity = capacity_init;
 
         items_raw: [capacity]T = undefined,
         len: usize = 0,
@@ -32,6 +33,25 @@ pub fn StackArray(comptime T: type, comptime capacity: usize) type {
 
             @memcpy(self.items_raw[self.len..new_len], other);
             self.len += other.len;
+        }
+
+        pub fn insert_slices(self: *Self, idx: usize, other: []const []const T) void {
+            var slice_len: usize = 0;
+            for (other) |slice| {
+                slice_len += slice.len;
+            }
+
+            std.debug.assert(self.len + slice_len <= capacity);
+
+            @memcpy(self.items_raw[(idx + slice_len)..(idx + 2*slice_len)], self.items_raw[idx..(idx + slice_len)]);
+
+            var offset = idx;
+            for (other) |slice| {
+                @memcpy(self.items_raw[offset..(offset + slice.len)], slice);
+                offset += slice.len;
+            }
+
+            self.len += slice_len;
         }
 
         pub fn pop(self: *Self) T {

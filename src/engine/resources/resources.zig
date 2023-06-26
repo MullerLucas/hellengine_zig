@@ -15,8 +15,6 @@ const backend_resources = if (true)
     engine.render.vulkan.resources;
 
 
-
-
 // ----------------------------------------------
 
 pub const Vertex = struct {
@@ -55,6 +53,61 @@ pub const Texture = struct {
 
 // ----------------------------------------------
 
+pub const IlluminationModel = enum(u8) {
+    ColorOnAmbientOff                                         = 0,
+    ColorOnAmbientOn                                          = 1,
+    HighlightOn                                               = 2,
+    ReflectionOnRayTraceOn                                    = 3,
+    Transparency                                              = 4,
+    ReflectionFresnelOnAndRayTraceOn                          = 5,
+    TransparencyRefractionOnReflectionFresnelOffAndRayTraceOn = 6,
+    TransparencyRefractionOnReflectionFresnelOnAndRayTraceOn  = 7,
+    ReflectionOnAndRayTraceOff                                = 8,
+    TransparencyGlassOnReflectionRayTraceOff                  = 9,
+    CastsShadowsOntoInvisibleSurfaces                         = 10,
+};
+
+pub const MaterialConfig = struct {
+    pub const MaterialName = engine.core.StackArray(u8, 512);
+
+    name: MaterialName,
+    /// *Ka*
+    ambient_color:     [3]f32 = .{ 1.0, 1.0, 1.0 },
+    /// *Kd*
+    diffuse_color:     [3]f32 = .{ 0.0, 0.0, 0.0 },
+    /// *Ks*
+    specular_color:    [3]f32 = .{ 0.0, 0.0, 0.0 },
+    /// *Ns*
+    specular_exponent: f32    = 1.0,
+    /// *d* or *Tr*
+    /// 1.0: fully opaque
+    alpha:             f32    = 1.0,
+    /// optical density: *Ni*
+    /// 0.001 - 10.0
+    /// 1.0: light does not bend as it passes through the object
+    refraction_index: f32    = 1.0,
+    illumination_model:     ?IlluminationModel = null,
+
+    /// *map_Ka*
+    ambient_color_map:      ?MaterialName = null,
+    /// *map_Kd*
+    diffuse_color_map:      ?MaterialName = null,
+    /// *map_Ks*
+    specular_color_map:     ?MaterialName = null,
+    /// *map_Ns*
+    specular_highlight_map: ?MaterialName = null,
+    /// *map_d*
+    alpha_map:              ?MaterialName = null,
+    /// *map_bump* or *bump*
+    bump_map:               ?MaterialName = null,
+    /// *map_disp*
+    displacement_map:       ?MaterialName = null,
+    /// *decal*
+    stencil_decal_map:      ?MaterialName = null,
+};
+
+// ----------------------------------------------
+
 pub const Material = struct {
     pub const MaterialName = engine.core.StackArray(u8, 128);
 
@@ -65,21 +118,6 @@ pub const Material = struct {
 
     frame_updated_at: FrameNumber = std.math.maxInt(FrameNumber),
 };
-
-// ----------------------------------------------
-
-// @Performance: think about using stack memory instead
-// pub const Mesh = struct {
-//     pub const IndexType = u32;
-//     // @Todo: use sensible values
-//     pub const sub_mesh_limit = 16;
-//
-//     vertices:   []Vertex,
-//     indices:    []IndexType,
-//     sub_meshes: engine.core.StackArray(Geometry, sub_mesh_limit) = .{},
-//
-//     internals: backend_resources.MeshInternals = undefined,
-// };
 
 // ----------------------------------------------
 

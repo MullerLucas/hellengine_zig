@@ -29,6 +29,8 @@ const Geometry = engine.resources.Geometry;
 const GeometryConfig = engine.resources.GeometryConfig;
 const GeometryInternals = engine.render.vulkan.resources.GeometryInternals;
 
+const obj_file = engine.resources.obj_file;
+
 // ----------------------------------------------
 
 pub const Renderer = struct {
@@ -285,19 +287,48 @@ pub const Renderer = struct {
     pub fn create_geometries_from_file(self: *Renderer, path: []const u8) !std.ArrayList(ResourceHandle) {
         Logger.debug("creating geometry '{}' from file '{s}'\n", .{self.geometries.len, path});
 
-        const obj_file = try std.fs.cwd().openFile(path, .{});
-        defer obj_file.close();
-        var reader = std.io.bufferedReader(obj_file.reader());
+        const geo_file = std.fs.cwd().openFile(path, .{}) catch |err| {
+            Logger.err("failed to open obj file '{s}'\n", .{path});
+            return err;
+        };
+        defer geo_file.close();
+        var geo_reader = std.io.bufferedReader(geo_file.reader());
 
-        var configs = try engine.resources.obj_file.ObjFileLoader.parse_obj_file(self.allocator, reader.reader());
-        defer configs.deinit();
-        var geometries_h = try std.ArrayList(ResourceHandle).initCapacity(self.allocator, configs.items.len);
+        var geo_result = obj_file.ObjFileParseResult.init(self.allocator);
+        try obj_file.ObjFileLoader.parse_obj_file(self.allocator, geo_reader.reader(), &geo_result);
+        defer geo_result.deinit();
 
-        for (0..configs.items.len) |idx| {
-            var config = configs.items[idx];
+        // create materials
+        if (geo_result.matlib_path) |_| {
+            const dirname = std.fs.path.dirname(path).?;
+
+            // const qualified_path = try std.fs.path.join(self.allocator, &[_][]const u8 {dirname, matlib_path.as_slice()});
+            geo_result.matlib_path.?.insert_slices(0, &.{dirname, "/"});
+            const matlib_path = geo_result.matlib_path.?.as_slice();
+
+            // const mat_file = std.fs.cwd().openFile(geo_result.matlib_path.?.as_slice(), .{}) catch |err| {
+            const mat_file = std.fs.cwd().openFile(matlib_path, .{}) catch |err| {
+                Logger.err("failed to open matlib file '{s}'\n", .{matlib_path});
+                return err;
+            };
+            defer mat_file.close();
+            var mat_reader = std.io.bufferedReader(mat_file.reader());
+
+            var mat_result = obj_file.ObjMaterialFileParseResult.init(self.allocator);
+            defer mat_result.deinit();
+            try obj_file.ObjFileLoader.parse_obj_material_file(self.allocator, mat_reader.reader(), &mat_result);
+
+            // @Todo: use mat_result
+        }
+
+        // create geometries
+        var geometries_h = try std.ArrayList(ResourceHandle).initCapacity(self.allocator, geo_result.geometry_configs.items.len);
+        for (0..geo_result.geometry_configs.items.len) |idx| {
+            var config = geo_result.geometry_configs.items[idx];
 
             try geometries_h.append(try self.create_geometry(&config));
         }
+
 
         return geometries_h;
     }
