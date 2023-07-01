@@ -196,7 +196,7 @@ pub const ObjFileLoader = struct {
         std.debug.assert(state.faces.items.len > 0);
 
         for (state.faces.items) |face| {
-            const new_index = @intCast(u32, vertices.items.len);
+            const new_index: u32 = @intCast(vertices.items.len);
 
             try vertices.append(Vertex {
                 .position = state.positions.items[face.position_offset - 1],
@@ -291,7 +291,7 @@ pub const ObjFileLoader = struct {
             // illumination model
             else if (std.mem.eql(u8, op, "illum")) {
                 const raw = try std.fmt.parseInt(u8, splits.next().?, 10);
-                curr_config.?.illumination_model = @intToEnum(engine.resources.IlluminationModel, raw);
+                curr_config.?.illumination_model = @enumFromInt(raw);
             }
             // ambient color map
             else if (std.mem.eql(u8, op, "map_Ka")) {

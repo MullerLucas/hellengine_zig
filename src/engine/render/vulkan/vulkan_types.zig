@@ -193,7 +193,7 @@ pub const ShaderInternals = struct {
     bound_instance_h: ResourceHandle = ResourceHandle.invalid,
 
     pub fn get_scope(self: *const ShaderInternals, scope: ShaderScope) *const ShaderScopeInternals {
-        return &self.scopes[@enumToInt(scope)];
+        return &self.scopes[@intFromEnum(scope)];
     }
 };
 

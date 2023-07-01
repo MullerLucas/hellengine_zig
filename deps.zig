@@ -86,22 +86,22 @@ fn checkMinZig(current: std.SemanticVersion, exe: *std.build.LibExeObjStep) void
 
 pub const dirs = struct {
     pub const _root = "";
-    pub const _pyhxnurs24bq = cache ++ "/../..";
-    pub const _csnhcd93wrg3 = cache ++ "/git/github.com/kooparse/zalgebra";
+    pub const _nwp8mhs4rlet = cache ++ "/../..";
+    pub const _k2ixd8spg0m8 = cache ++ "/git/github.com/kooparse/zalgebra";
     pub const _ejo6kd3iffi3 = cache ++ "/v/git/github.com/Vulfox/wavefront-obj/branch-stage2";
     pub const _al1d3deiv60z = cache ++ "/git/github.com/ziglibs/zlm";
-    pub const _grvmsgjb9gdm = cache ++ "/git/github.com/hexops/mach-glfw";
+    pub const _1t1xekb9gcqy = cache ++ "/git/github.com/hexops/mach-glfw";
     pub const _uxw7q1ovyv4z = cache ++ "/git/github.com/Snektron/vulkan-zig";
-    pub const _2ql5xwn2ehqb = cache ++ "/git/github.com/nothings/stb";
+    pub const _fnqo9qcgrsyp = cache ++ "/git/github.com/nothings/stb";
 };
 
 pub const package_data = struct {
-    pub var _pyhxnurs24bq = Package{
-        .directory = dirs._pyhxnurs24bq,
+    pub var _nwp8mhs4rlet = Package{
+        .directory = dirs._nwp8mhs4rlet,
     };
-    pub var _csnhcd93wrg3 = Package{
-        .directory = dirs._csnhcd93wrg3,
-        .pkg = Pkg{ .name = "zalgebra", .source = .{ .path = dirs._csnhcd93wrg3 ++ "/src/main.zig" }, .dependencies = &.{} },
+    pub var _k2ixd8spg0m8 = Package{
+        .directory = dirs._k2ixd8spg0m8,
+        .pkg = Pkg{ .name = "zalgebra", .source = .{ .path = dirs._k2ixd8spg0m8 ++ "/src/main.zig" }, .dependencies = &.{} },
     };
     pub var _al1d3deiv60z = Package{
         .directory = dirs._al1d3deiv60z,
@@ -111,17 +111,17 @@ pub const package_data = struct {
         .directory = dirs._ejo6kd3iffi3,
         .pkg = Pkg{ .name = "wavefront-obj", .source = .{ .path = dirs._ejo6kd3iffi3 ++ "/wavefront-obj.zig" }, .dependencies = &.{ &_al1d3deiv60z } },
     };
-    pub var _grvmsgjb9gdm = Package{
-        .directory = dirs._grvmsgjb9gdm,
-        .pkg = Pkg{ .name = "build_glfw", .source = .{ .path = dirs._grvmsgjb9gdm ++ "/build.zig" }, .dependencies = &.{} },
+    pub var _1t1xekb9gcqy = Package{
+        .directory = dirs._1t1xekb9gcqy,
+        .pkg = Pkg{ .name = "build_glfw", .source = .{ .path = dirs._1t1xekb9gcqy ++ "/build.zig" }, .dependencies = &.{} },
     };
     pub var _uxw7q1ovyv4z = Package{
         .directory = dirs._uxw7q1ovyv4z,
         .pkg = Pkg{ .name = "vk_gen", .source = .{ .path = dirs._uxw7q1ovyv4z ++ "/generator/index.zig" }, .dependencies = &.{} },
     };
-    pub var _2ql5xwn2ehqb = Package{
-        .directory = dirs._2ql5xwn2ehqb,
-        .pkg = Pkg{ .name = "stb", .source = .{ .path = dirs._2ql5xwn2ehqb ++ "/''" }, .dependencies = &.{} },
+    pub var _fnqo9qcgrsyp = Package{
+        .directory = dirs._fnqo9qcgrsyp,
+        .pkg = Pkg{ .name = "stb", .source = .{ .path = dirs._fnqo9qcgrsyp ++ "/''" }, .dependencies = &.{} },
     };
     pub var _root = Package{
         .directory = dirs._root,
@@ -129,12 +129,12 @@ pub const package_data = struct {
 };
 
 pub const packages = &[_]*Package{
-    &package_data._csnhcd93wrg3,
+    &package_data._k2ixd8spg0m8,
     &package_data._ejo6kd3iffi3,
 };
 
 pub const pkgs = struct {
-    pub const zalgebra = &package_data._csnhcd93wrg3;
+    pub const zalgebra = &package_data._k2ixd8spg0m8;
     pub const wavefront_obj = &package_data._ejo6kd3iffi3;
 };
 

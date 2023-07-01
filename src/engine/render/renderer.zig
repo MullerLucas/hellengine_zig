@@ -172,8 +172,8 @@ pub const Renderer = struct {
         }
 
         return engine.resources.RawImage {
-            .width  = @intCast(u32, width),
-            .height = @intCast(u32, height),
+            .width  = @intCast(width),
+            .height = @intCast(height),
             .pixels = pixels.?,
         };
     }

@@ -13,11 +13,11 @@ pub const AnsiColor8 = enum(u8) {
     default = 9,
 
     fn as_fg_str(comptime self: AnsiColor8) []const u8 {
-        return std.fmt.comptimePrint("\x1b[3{}m", .{ @enumToInt(self) });
+        return std.fmt.comptimePrint("\x1b[3{}m", .{ @intFromEnum(self) });
     }
 
     fn as_bg_str(comptime self: AnsiColor8) []const u8 {
-        return std.fmt.comptimePrint("\x1b[4{}m", .{ @enumToInt(self) });
+        return std.fmt.comptimePrint("\x1b[4{}m", .{ @intFromEnum(self) });
     }
 };
 
