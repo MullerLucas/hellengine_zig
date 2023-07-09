@@ -1,6 +1,7 @@
 const std = @import("std");
 const engine = @import("../engine.zig");
 const vk = @import("vulkan");
+const string = engine.core.string;
 
 const ResourceHandle = engine.core.ResourceHandle;
 
@@ -68,7 +69,7 @@ pub const IlluminationModel = enum(u8) {
 };
 
 pub const MaterialInfo = struct {
-    pub const MaterialName = engine.core.StackArray(u8, 512);
+    pub const MaterialName = string.SString128;
 
     name: MaterialName,
     /// *Ka*
@@ -115,8 +116,6 @@ pub const MaterialCreateInfo = struct {
 // ----------------------------------------------
 
 pub const Material = struct {
-    pub const MaterialName = engine.core.StackArray(u8, 128);
-
     info:       MaterialInfo,
     program_h:  ResourceHandle,
     textures_h: [engine.config.max_uniform_samplers_per_instance]ResourceHandle = undefined,

@@ -240,7 +240,7 @@ pub const ObjFileLoader = struct {
 
                 try result.create_infos.append(MaterialCreateInfo {
                     .info = MaterialInfo {
-                        .name = MaterialInfo.MaterialName.from_slice_with_sentinel(0, mat_name),
+                        .name = MaterialInfo.MaterialName.from_slice_with_zero_terminator(mat_name),
                     },
                 });
                 curr_create_info = &result.create_infos.items[result.create_infos.items.len - 1];
@@ -296,35 +296,35 @@ pub const ObjFileLoader = struct {
             }
             // ambient color map
             else if (std.mem.eql(u8, op, "map_Ka")) {
-                curr_create_info.?.ambient_color_map = MaterialInfo.MaterialName.from_slices_with_sentinel(0, &.{base_path,  "/", splits.next().?});
+                curr_create_info.?.ambient_color_map = MaterialInfo.MaterialName.from_slices_with_zero_terminator(&.{base_path,  "/", splits.next().?});
             }
             // diffuse color map
             else if (std.mem.eql(u8, op, "map_Kd")) {
-                curr_create_info.?.diffuse_color_map  = MaterialInfo.MaterialName.from_slices_with_sentinel(0, &.{base_path,  "/", splits.next().?});
+                curr_create_info.?.diffuse_color_map  = MaterialInfo.MaterialName.from_slices_with_zero_terminator(&.{base_path,  "/", splits.next().?});
             }
             // specular color map
             else if (std.mem.eql(u8, op, "map_Kd")) {
-                curr_create_info.?.specular_color_map = MaterialInfo.MaterialName.from_slices_with_sentinel(0, &.{base_path,  "/", splits.next().?});
+                curr_create_info.?.specular_color_map = MaterialInfo.MaterialName.from_slices_with_zero_terminator(&.{base_path,  "/", splits.next().?});
             }
             // specular highlight map
             else if (std.mem.eql(u8, op, "map_Ns")) {
-                curr_create_info.?.specular_highlight_map = MaterialInfo.MaterialName.from_slices_with_sentinel(0, &.{base_path,  "/", splits.next().?});
+                curr_create_info.?.specular_highlight_map = MaterialInfo.MaterialName.from_slices_with_zero_terminator(&.{base_path,  "/", splits.next().?});
             }
             // disolve map
             else if (std.mem.eql(u8, op, "map_d")) {
-                curr_create_info.?.alpha_map = MaterialInfo.MaterialName.from_slices_with_sentinel(0, &.{base_path,  "/", splits.next().?});
+                curr_create_info.?.alpha_map = MaterialInfo.MaterialName.from_slices_with_zero_terminator(&.{base_path,  "/", splits.next().?});
             }
             // bump map
             else if (std.mem.eql(u8, op, "map_bump") or std.mem.eql(u8, op, "bump")) {
-                curr_create_info.?.bump_map = MaterialInfo.MaterialName.from_slices_with_sentinel(0, &.{base_path,  "/", splits.next().?});
+                curr_create_info.?.bump_map = MaterialInfo.MaterialName.from_slices_with_zero_terminator(&.{base_path,  "/", splits.next().?});
             }
             // displacement map
             else if (std.mem.eql(u8, op, "map_disp")) {
-                curr_create_info.?.displacement_map = MaterialInfo.MaterialName.from_slices_with_sentinel(0, &.{base_path,  "/", splits.next().?});
+                curr_create_info.?.displacement_map = MaterialInfo.MaterialName.from_slices_with_zero_terminator(&.{base_path,  "/", splits.next().?});
             }
             // decal map
             else if (std.mem.eql(u8, op, "decal")) {
-                curr_create_info.?.stencil_decal_map = MaterialInfo.MaterialName.from_slices_with_sentinel(0, &.{base_path,  "/", splits.next().?});
+                curr_create_info.?.stencil_decal_map = MaterialInfo.MaterialName.from_slices_with_zero_terminator(&.{base_path,  "/", splits.next().?});
             }
             else {
                 Logger.warn("ignoring unknown operation in obj-matlib-file '{s}'\n", .{op});

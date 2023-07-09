@@ -9,7 +9,7 @@ const config = @import("../config.zig");
 const NumberFormat = render.NumberFormat;
 const ResourceHandle = core.ResourceHandle;
 const Logger = core.log.scoped(.render);
-const String = core.String;
+const String = core.string.String;
 
 const vulkan = @import("vulkan/vulkan.zig");
 

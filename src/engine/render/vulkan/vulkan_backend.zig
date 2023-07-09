@@ -1699,7 +1699,7 @@ pub const VulkanBackend = struct {
                 const scope_info = &info.scopes[scope_idx];
 
                 for (scope_info.buffers.as_slice()) |scope_buffer| {
-                    Logger.debug("add push constant '{s}' with size '{}' to scope '{}'\n", .{scope_buffer.name.data.items, scope_buffer.size, scope});
+                    Logger.debug("add push constant '{s}' with size '{}' to scope '{}'\n", .{scope_buffer.name.as_slice(), scope_buffer.size, scope});
 
                     const range = core.utils.get_aligned_range(0, scope_buffer.size, CFG.vulkan_push_constant_alignment);
                     internals.push_constant_internals.push(.{
