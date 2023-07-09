@@ -67,43 +67,49 @@ pub const IlluminationModel = enum(u8) {
     CastsShadowsOntoInvisibleSurfaces                         = 10,
 };
 
-pub const MaterialConfig = struct {
+pub const MaterialInfo = struct {
     pub const MaterialName = engine.core.StackArray(u8, 512);
 
     name: MaterialName,
     /// *Ka*
-    ambient_color:     [3]f32 = .{ 1.0, 1.0, 1.0 },
+    ambient_color:      [3]f32 = .{ 1.0, 1.0, 1.0 },
     /// *Kd*
-    diffuse_color:     [3]f32 = .{ 0.0, 0.0, 0.0 },
+    diffuse_color:      [3]f32 = .{ 0.0, 0.0, 0.0 },
     /// *Ks*
-    specular_color:    [3]f32 = .{ 0.0, 0.0, 0.0 },
+    specular_color:     [3]f32 = .{ 0.0, 0.0, 0.0 },
     /// *Ns*
-    specular_exponent: f32    = 1.0,
+    specular_exponent:  f32    = 1.0,
     /// *d* or *Tr*
     /// 1.0: fully opaque
-    alpha:             f32    = 1.0,
+    alpha:              f32    = 1.0,
     /// optical density: *Ni*
     /// 0.001 - 10.0
     /// 1.0: light does not bend as it passes through the object
-    refraction_index: f32    = 1.0,
-    illumination_model:     ?IlluminationModel = null,
+    refraction_index:   f32     = 1.0,
+    illumination_model: ?IlluminationModel = null,
+};
+
+pub const MaterialCreateInfo = struct {
+    pub const List = std.ArrayList(MaterialCreateInfo);
+
+    info:                   MaterialInfo,
 
     /// *map_Ka*
-    ambient_color_map:      ?MaterialName = null,
+    ambient_color_map:      ?MaterialInfo.MaterialName = null,
     /// *map_Kd*
-    diffuse_color_map:      ?MaterialName = null,
+    diffuse_color_map:      ?MaterialInfo.MaterialName = null,
     /// *map_Ks*
-    specular_color_map:     ?MaterialName = null,
+    specular_color_map:     ?MaterialInfo.MaterialName = null,
     /// *map_Ns*
-    specular_highlight_map: ?MaterialName = null,
+    specular_highlight_map: ?MaterialInfo.MaterialName = null,
     /// *map_d*
-    alpha_map:              ?MaterialName = null,
+    alpha_map:              ?MaterialInfo.MaterialName = null,
     /// *map_bump* or *bump*
-    bump_map:               ?MaterialName = null,
+    bump_map:               ?MaterialInfo.MaterialName = null,
     /// *map_disp*
-    displacement_map:       ?MaterialName = null,
+    displacement_map:       ?MaterialInfo.MaterialName = null,
     /// *decal*
-    stencil_decal_map:      ?MaterialName = null,
+    stencil_decal_map:      ?MaterialInfo.MaterialName = null,
 };
 
 // ----------------------------------------------
@@ -111,7 +117,7 @@ pub const MaterialConfig = struct {
 pub const Material = struct {
     pub const MaterialName = engine.core.StackArray(u8, 128);
 
-    name:       MaterialName,
+    info:       MaterialInfo,
     program_h:  ResourceHandle,
     textures_h: [engine.config.max_uniform_samplers_per_instance]ResourceHandle = undefined,
     internals:  backend_resources.MaterialInternals = .{},

@@ -1084,8 +1084,8 @@ pub const VulkanBackend = struct {
         const offsets = [_]vk.DeviceSize{0};
         const vertex_buffers = [_]vk.Buffer {self.get_buffer(geometry.internals.vertex_buffer_h).buf};
         const index_buffer = self.get_buffer(geometry.internals.index_buffer_h).buf;
-        const index_count: u32 = @intCast(geometry.indices.len);
-        _ = index_count;
+        // const index_count: u32 = @intCast(geometry.indices.len);
+        // _ = index_count;
 
         self.vkd.cmdBindVertexBuffers(command_buffer, 0, 1, &vertex_buffers, &offsets);
         self.vkd.cmdBindIndexBuffer  (command_buffer, index_buffer, 0, to_vk_index_type(Geometry.IndexType));
@@ -1772,7 +1772,7 @@ pub const VulkanBackend = struct {
         };
 
         const all_global_data = [_]render.GlobalShaderData { global_data };
-        const all_scene_data = [_]render.SceneShaderData { scene_data, scene_data, scene_data };
+        const all_scene_data = [_]render.SceneShaderData { scene_data, scene_data, scene_data, scene_data };
 
         const instance_h = ResourceHandle.zero;
 
@@ -1789,11 +1789,6 @@ pub const VulkanBackend = struct {
             self.shader_set_uniform_buffer(render.SceneShaderData, info, internals, &all_scene_data);
             try self.shader_apply_uniform_scope(.scene, instance_h, info, internals, true);
         }
-
-        // bind material scope (sampler)
-        // {
-        //     try self.shader_apply_uniform_scope(.material, instance_h, info, internals);
-        // }
     }
 
     // TODO(lm): think about what happens when this function is used at local scope

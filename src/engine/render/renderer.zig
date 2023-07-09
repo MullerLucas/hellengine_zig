@@ -25,6 +25,7 @@ const ObjFace  = engine.resources.obj_file.ObjFace;
 const ObjParseState = engine.resources.obj_file.ObjFileParseState;
 const Texture  = engine.resources.Texture;
 const Material = engine.resources.Material;
+const MaterialCreateInfo = engine.resources.MaterialCreateInfo;
 const Geometry = engine.resources.Geometry;
 const GeometryConfig = engine.resources.GeometryConfig;
 const GeometryInternals = engine.render.vulkan.resources.GeometryInternals;
@@ -185,7 +186,7 @@ pub const Renderer = struct {
 
     pub fn create_texture(self: *Renderer, path: [*:0]const u8) !ResourceHandle {
         const texture_h = ResourceHandle { .value = self.textures.len };
-        Logger.debug("create texture '{}' from path '{s}", .{texture_h.value, path});
+        Logger.debug("create texture '{}' from path '{s}\n", .{texture_h.value, path});
 
         self.textures.push(Texture { });
         const texture = self.get_texture_mut(texture_h);
@@ -224,24 +225,28 @@ pub const Renderer = struct {
 
     // ------------------------------------------
 
-    pub fn create_material(self: *Renderer, program_h: ResourceHandle, material_name: []const u8, texture_path: [*:0]const u8) !ResourceHandle {
+    pub fn create_material(self: *Renderer, program_h: ResourceHandle, create_info: *const MaterialCreateInfo) !ResourceHandle {
         const material_h = ResourceHandle { .value = self.materials.len };
-        Logger.debug("creating material '{}'", .{material_h.value});
+        Logger.debug("creating material '{}'\n", .{material_h.value});
 
         self.materials.push(Material {
-            .name      = Material.MaterialName.from_slice(material_name),
+            .info      = create_info.info,
             .program_h = program_h,
         });
         const material = self.get_material_mut(material_h);
 
         // @Hack
-        material.textures_h[0] = try self.create_texture(texture_path);
+        material.textures_h[0] = try self.create_texture(create_info.diffuse_color_map.?.as_sentinel_ptr(0));
 
         const program = self.get_shader_program_mut(program_h);
         try self.backend.create_material_internals(program, material, Renderer.get_default_material());
+        // @Hack
+        _ = try self.backend.shader_acquire_instance_resources(&program.info, &program.internals, .global, Renderer.get_default_material());
+        _ = try self.backend.shader_acquire_instance_resources(&program.info, &program.internals, .scene,  Renderer.get_default_material());
 
         const texture = self.get_texture(material.textures_h[0]);
         self.backend.shader_set_material_texture_image(&program.internals, &material.internals, &texture.internals);
+
 
         return material_h;
     }
@@ -274,7 +279,7 @@ pub const Renderer = struct {
     // @Todo: actually implement
     pub fn find_material(self: *const Renderer, material_name: []const u8) ?ResourceHandle {
         for (self.materials.as_slice(), 0..) |material, idx| {
-            if (material.name.eql_slice(material_name)) {
+            if (material.info.name.eql_slice(material_name)) {
                 // @Hack
                 return ResourceHandle { .value = idx };
             }
@@ -284,7 +289,7 @@ pub const Renderer = struct {
 
     // ------------------------------------------
 
-    pub fn create_geometries_from_file(self: *Renderer, path: []const u8) !std.ArrayList(ResourceHandle) {
+    pub fn create_geometries_from_file(self: *Renderer, path: []const u8, program_h: ResourceHandle) !std.ArrayList(ResourceHandle) {
         Logger.debug("creating geometry '{}' from file '{s}'\n", .{self.geometries.len, path});
 
         const geo_file = std.fs.cwd().openFile(path, .{}) catch |err| {
@@ -316,9 +321,13 @@ pub const Renderer = struct {
 
             var mat_result = obj_file.ObjMaterialFileParseResult.init(self.allocator);
             defer mat_result.deinit();
-            try obj_file.ObjFileLoader.parse_obj_material_file(self.allocator, mat_reader.reader(), &mat_result);
+            try obj_file.ObjFileLoader.parse_obj_material_file(self.allocator, mat_reader.reader(), &mat_result, dirname);
 
             // @Todo: use mat_result
+            for (mat_result.create_infos.items) |create_info| {
+                // @Perf: copy?
+                _ = try self.create_material(program_h, &create_info);
+            }
         }
 
         // create geometries

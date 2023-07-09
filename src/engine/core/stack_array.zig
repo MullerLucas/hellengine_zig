@@ -10,14 +10,52 @@ pub fn StackArray(comptime T: type, comptime capacity_init: usize) type {
         items_raw: [capacity]T = undefined,
         len: usize = 0,
 
-        pub fn from_slice(s: []const T) Self {
-            std.debug.assert(s.len <= capacity);
+        pub inline fn from(other: Self) Self {
+            return Self.from_slice(other.as_slice());
+        }
+
+        pub fn from_slice(slice: []const T) Self {
+            std.debug.assert(slice.len <= capacity);
 
             var self = Self {
-                .len = s.len,
+                .len = slice.len,
             };
 
-            @memcpy(self.items_raw[0..s.len], s);
+            @memcpy(self.items_raw[0..slice.len], slice);
+            return self;
+        }
+
+        pub fn from_slices(slices: []const []const T) Self {
+            var self = Self {
+                .len = 0,
+            };
+
+            self.insert_slices(0, slices);
+
+            return self;
+        }
+
+        pub fn from_slice_with_sentinel(comptime s: T, slice: []const T) Self {
+            // @Note: We add 1 to the length to account for the sentinel.
+            const total_len = slice.len + 1;
+            std.debug.assert(total_len <= capacity);
+
+            var self = Self {
+                .len = slice.len,
+            };
+
+            @memcpy(self.items_raw[0..slice.len], slice);
+            self.items_raw[slice.len] = s;
+            return self;
+        }
+
+        pub fn from_slices_with_sentinel(comptime s: T, slices: []const []const T) Self {
+            var self = Self.from_slices(slices);
+            self.push(s);
+
+            std.debug.assert(self.len + 1 <= capacity);
+            self.items_raw[self.len] = s;
+
             return self;
         }
 
@@ -70,6 +108,14 @@ pub fn StackArray(comptime T: type, comptime capacity_init: usize) type {
 
         pub inline fn as_slice(self: *const Self) []const T {
             return self.items_raw[0..self.len];
+        }
+
+        pub inline fn as_sentinel_slice(self: *const Self, comptime s: T) [:s]const T {
+            return self.items_raw[0..self.len];
+        }
+
+        pub inline fn as_sentinel_ptr(self: *const Self, comptime s: T) [*:s]const T {
+            return @ptrCast(self.items_raw[0..self.len].ptr);
         }
 
         pub fn get(self: *const Self, idx: usize) *const T {

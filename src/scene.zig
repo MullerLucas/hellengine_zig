@@ -23,7 +23,6 @@ pub const TestScene = struct {
     renderer:    *Renderer,
     program_h:   ResourceHandle = ResourceHandle.invalid,
     meshes_h:    core.StackArray(ResourceHandle, 64) = .{},
-    materials_h: [5]ResourceHandle = undefined,
 
     pub fn init(allocator: std.mem.Allocator, renderer: *Renderer) !TestScene {
         Logger.info("initializing test-scene\n", .{});
@@ -57,23 +56,23 @@ pub const TestScene = struct {
         }
 
         // create materials
-        {
-            // @Hack
-            const program = self.renderer.get_shader_program_mut(self.program_h);
-            _ = try self.renderer.backend.shader_acquire_instance_resources(&program.info, &program.internals, .global, Renderer.get_default_material());
-            _ = try self.renderer.backend.shader_acquire_instance_resources(&program.info, &program.internals, .scene,  Renderer.get_default_material());
-
-            self.materials_h[0] = try self.renderer.create_material(self.program_h, "test_mat_1", "resources/misc/texture_v1.jpg");
-            self.materials_h[1] = try self.renderer.create_material(self.program_h, "test_mat_2", "resources/misc/texture_v2.jpg");
-
-            self.materials_h[2] = try self.renderer.create_material(self.program_h, "Black",  "resources/misc/texture_v2.jpg");
-            self.materials_h[3] = try self.renderer.create_material(self.program_h, "Lights", "resources/misc/texture_v2.jpg");
-            self.materials_h[4] = try self.renderer.create_material(self.program_h, "Green",  "resources/misc/texture_v2.jpg");
-        }
+        // {
+        //     // @Hack
+        //     const program = self.renderer.get_shader_program_mut(self.program_h);
+        //     _ = try self.renderer.backend.shader_acquire_instance_resources(&program.info, &program.internals, .global, Renderer.get_default_material());
+        //     _ = try self.renderer.backend.shader_acquire_instance_resources(&program.info, &program.internals, .scene,  Renderer.get_default_material());
+        //
+        //     // self.materials_h[0] = try self.renderer.create_material(self.program_h, "test_mat_1", "resources/misc/texture_v1.jpg");
+        //     // self.materials_h[1] = try self.renderer.create_material(self.program_h, "test_mat_2", "resources/misc/texture_v2.jpg");
+        //     //
+        //     // self.materials_h[2] = try self.renderer.create_material(self.program_h, "Black",  "resources/misc/texture_v2.jpg");
+        //     // self.materials_h[3] = try self.renderer.create_material(self.program_h, "Lights", "resources/misc/texture_v2.jpg");
+        //     // self.materials_h[4] = try self.renderer.create_material(self.program_h, "Green",  "resources/misc/texture_v2.jpg");
+        // }
 
         // create meshes
         {
-            const meshes_h = try self.renderer.create_geometries_from_file("resources/double_box/double_box.obj");
+            const meshes_h = try self.renderer.create_geometries_from_file("resources/double_box/double_box.obj", self.program_h);
             // const meshes_h = try self.renderer.create_geometries_from_file("resources/toy_tank/toy_tank.obj");
             defer meshes_h.deinit();
 
@@ -90,10 +89,6 @@ pub const TestScene = struct {
 
         for (self.meshes_h.as_slice()) |mesh_h| {
             self.renderer.destroy_geometry(mesh_h);
-        }
-
-        for (self.materials_h) |material_h| {
-            self.renderer.destroy_material(material_h);
         }
 
         self.renderer.destroy_shader_program(self.program_h);
