@@ -28,7 +28,7 @@ pub fn main() !void {
     defer window.deinit();
 
     var renderer = Renderer.init(allocator, &window) catch |err| {
-        Logger.err("application failed to init with error: {any}", .{err});
+        Logger.err("application failed to init with error: {any}\n", .{err});
         return;
     };
     defer renderer.deinit();

@@ -251,7 +251,7 @@ pub const VulkanBackend = struct {
         }
 
         const app_info = vk.ApplicationInfo{
-            .p_application_name = "Hello Triangle",
+            .p_application_name = "hellengine",
             .application_version = vk.makeApiVersion(1, 0, 0, 0),
             .p_engine_name = "No Engine",
             .engine_version = vk.makeApiVersion(1, 0, 0, 0),
@@ -312,7 +312,7 @@ pub const VulkanBackend = struct {
     }
 
     fn create_surface(self: *Self) !void {
-        if ((self.window.create_window_surface(self.instance, &self.surface)) != @intFromEnum(vk.Result.success)) {
+        if ((self.window.create_window_surface(self.instance, null, &self.surface)) != @intFromEnum(vk.Result.success)) {
             return error.SurfaceInitFailed;
         }
     }
@@ -1193,8 +1193,8 @@ pub const VulkanBackend = struct {
         } else {
             const window_size = self.window.get_framebuffer_size();
 
-            return vk.Extent2D{
-                .width = std.math.clamp(window_size.width, capabilities.min_image_extent.width, capabilities.max_image_extent.width),
+            return vk.Extent2D {
+                .width  = std.math.clamp(window_size.width, capabilities.min_image_extent.width, capabilities.max_image_extent.width),
                 .height = std.math.clamp(window_size.height, capabilities.min_image_extent.height, capabilities.max_image_extent.height),
             };
         }
@@ -1562,8 +1562,8 @@ pub const VulkanBackend = struct {
             }
         }
 
-        // TODO(lm): compress uniform- and storage-buffer creation
         // create uniform-buffer
+        // TODO(lm): compress uniform- and storage-buffer creation
         {
             for (UNIFORM_SCOPES) |scopes| {
                 const scope_idx = @intFromEnum(scopes);
@@ -1599,7 +1599,7 @@ pub const VulkanBackend = struct {
         // create storage-buffer
         {
             for (STORAGE_SCOPES) |scope| {
-                const scope_idx = @intFromEnum(scope);
+                const scope_idx     = @intFromEnum(scope);
                 const scope_info    = info.scopes[scope_idx];
                 var scope_internals = &internals.scopes[scope_idx];
 
@@ -1695,7 +1695,7 @@ pub const VulkanBackend = struct {
         // add push constants
         {
             for (PUSH_CONSTANT_SCOPES) |scope| {
-                const scope_idx = @intFromEnum(scope);
+                const scope_idx  = @intFromEnum(scope);
                 const scope_info = &info.scopes[scope_idx];
 
                 for (scope_info.buffers.as_slice()) |scope_buffer| {

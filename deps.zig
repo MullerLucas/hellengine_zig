@@ -28,11 +28,11 @@ pub fn addAllTo(exe: *std.build.LibExeObjStep) void {
             llc = true;
         }
         for (pkg.c_include_dirs) |item| {
-            exe.addIncludePath(b.fmt("{s}/{s}", .{ @field(dirs, decl.name), item }));
+            exe.addIncludePath(.{.path = b.fmt("{s}/{s}", .{ @field(dirs, decl.name), item })});
             llc = true;
         }
         for (pkg.c_source_files) |item| {
-            exe.addCSourceFile(b.fmt("{s}/{s}", .{ @field(dirs, decl.name), item }), pkg.c_source_flags);
+            exe.addCSourceFile(.{ .file = .{ .path = b.fmt("{s}/{s}", .{ @field(dirs, decl.name), item }) }, .flags = pkg.c_source_flags });
             llc = true;
         }
         vcpkg = vcpkg or pkg.vcpkg;
@@ -86,42 +86,22 @@ fn checkMinZig(current: std.SemanticVersion, exe: *std.build.LibExeObjStep) void
 
 pub const dirs = struct {
     pub const _root = "";
-    pub const _nwp8mhs4rlet = cache ++ "/../..";
-    pub const _k2ixd8spg0m8 = cache ++ "/git/github.com/kooparse/zalgebra";
-    pub const _ejo6kd3iffi3 = cache ++ "/v/git/github.com/Vulfox/wavefront-obj/branch-stage2";
-    pub const _al1d3deiv60z = cache ++ "/git/github.com/ziglibs/zlm";
-    pub const _1t1xekb9gcqy = cache ++ "/git/github.com/hexops/mach-glfw";
+    pub const _0dqv0c1jve2s = cache ++ "/../..";
     pub const _uxw7q1ovyv4z = cache ++ "/git/github.com/Snektron/vulkan-zig";
-    pub const _fnqo9qcgrsyp = cache ++ "/git/github.com/nothings/stb";
+    pub const _axwlt109ladf = cache ++ "/git/github.com/kooparse/zalgebra";
 };
 
 pub const package_data = struct {
-    pub var _nwp8mhs4rlet = Package{
-        .directory = dirs._nwp8mhs4rlet,
-    };
-    pub var _k2ixd8spg0m8 = Package{
-        .directory = dirs._k2ixd8spg0m8,
-        .pkg = Pkg{ .name = "zalgebra", .source = .{ .path = dirs._k2ixd8spg0m8 ++ "/src/main.zig" }, .dependencies = &.{} },
-    };
-    pub var _al1d3deiv60z = Package{
-        .directory = dirs._al1d3deiv60z,
-        .pkg = Pkg{ .name = "zlm", .source = .{ .path = dirs._al1d3deiv60z ++ "/src/zlm.zig" }, .dependencies = &.{} },
-    };
-    pub var _ejo6kd3iffi3 = Package{
-        .directory = dirs._ejo6kd3iffi3,
-        .pkg = Pkg{ .name = "wavefront-obj", .source = .{ .path = dirs._ejo6kd3iffi3 ++ "/wavefront-obj.zig" }, .dependencies = &.{ &_al1d3deiv60z } },
-    };
-    pub var _1t1xekb9gcqy = Package{
-        .directory = dirs._1t1xekb9gcqy,
-        .pkg = Pkg{ .name = "build_glfw", .source = .{ .path = dirs._1t1xekb9gcqy ++ "/build.zig" }, .dependencies = &.{} },
+    pub var _0dqv0c1jve2s = Package{
+        .directory = dirs._0dqv0c1jve2s,
     };
     pub var _uxw7q1ovyv4z = Package{
         .directory = dirs._uxw7q1ovyv4z,
         .pkg = Pkg{ .name = "vk_gen", .source = .{ .path = dirs._uxw7q1ovyv4z ++ "/generator/index.zig" }, .dependencies = &.{} },
     };
-    pub var _fnqo9qcgrsyp = Package{
-        .directory = dirs._fnqo9qcgrsyp,
-        .pkg = Pkg{ .name = "stb", .source = .{ .path = dirs._fnqo9qcgrsyp ++ "/''" }, .dependencies = &.{} },
+    pub var _axwlt109ladf = Package{
+        .directory = dirs._axwlt109ladf,
+        .pkg = Pkg{ .name = "zalgebra", .source = .{ .path = dirs._axwlt109ladf ++ "/src/main.zig" }, .dependencies = &.{} },
     };
     pub var _root = Package{
         .directory = dirs._root,
@@ -129,18 +109,18 @@ pub const package_data = struct {
 };
 
 pub const packages = &[_]*Package{
-    &package_data._k2ixd8spg0m8,
-    &package_data._ejo6kd3iffi3,
+    &package_data._uxw7q1ovyv4z,
+    &package_data._uxw7q1ovyv4z,
+    &package_data._axwlt109ladf,
 };
 
 pub const pkgs = struct {
-    pub const zalgebra = &package_data._k2ixd8spg0m8;
-    pub const wavefront_obj = &package_data._ejo6kd3iffi3;
+    pub const vk_gen = &package_data._uxw7q1ovyv4z;
+    pub const vk_build = &package_data._uxw7q1ovyv4z;
+    pub const zalgebra = &package_data._axwlt109ladf;
 };
 
 pub const imports = struct {
-    pub const build_glfw = @import(".zigmod/deps/git/github.com/hexops/mach-glfw/build.zig");
     pub const vk_gen = @import(".zigmod/deps/git/github.com/Snektron/vulkan-zig/generator/index.zig");
     pub const vk_build = @import(".zigmod/deps/git/github.com/Snektron/vulkan-zig/build.zig");
-    pub const stb = @import(".zigmod/deps/git/github.com/nothings/stb/''");
 };

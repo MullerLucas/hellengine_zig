@@ -1,6 +1,3 @@
-// [Wafefront .obj file](https://en.wikipedia.org/wiki/Wavefront_.obj_file)
-// https://github.com/JoshuaMasci/zig-obj/blob/main/src/lib.zig
-
 const std = @import("std");
 const engine = @import("../engine.zig");
 const resources = @import("resources.zig");

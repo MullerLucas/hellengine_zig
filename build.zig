@@ -1,7 +1,6 @@
 const std = @import("std");
 
 const deps = @import("deps.zig");
-const glfw = deps.imports.build_glfw;
 const vkgen = deps.imports.vk_gen;
 const vkbuild = deps.imports.vk_build;
 
@@ -17,7 +16,6 @@ pub fn build(b: *std.Build) !void {
         .optimize = optimize,
     });
 
-    // const gen = vkgen.VkGenerateStep.init(b, deps.cache ++ "/git/github.com/Snektron/vulkan-zig/examples/vk.xml", "vk.zig");
     const gen = vkgen.VkGenerateStep.create(b, "vk.xml");
     exe.addModule("vulkan", gen.getModule());
 
@@ -30,14 +28,17 @@ pub fn build(b: *std.Build) !void {
     shaders.add("frag_27", "src/engine/shaders/27_shader_depth.frag", .{});
     exe.addModule("resources", shaders.getModule());
 
-
     exe.linkLibC();
-    exe.addIncludePath(deps.cache ++ "/git/github.com/nothings/stb");
-    exe.addCSourceFile("libs/stb/stb_impl.c", &.{"-std=c99"});
+    exe.linkSystemLibrary("glfw3");
 
-    // mach-glfw
-    exe.addModule("glfw", glfw.module(b));
-    try glfw.link(b, exe, .{});
+    // const stb_path = std.Build.LazyPath.relative(deps.cache ++ "/git/github.com/nothings/stb");
+    const stb_path = std.Build.LazyPath.relative("include/stb");
+    exe.addIncludePath(stb_path);
+
+    exe.addCSourceFile(.{
+        .file  = std.Build.LazyPath.relative("libs/stb/stb_impl.c"),
+        .flags = &.{"-std=c99"},
+    });
 
     // zigmod fetched deps
     deps.addAllTo(exe);
