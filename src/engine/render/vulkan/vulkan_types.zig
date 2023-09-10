@@ -1,5 +1,5 @@
 const std    = @import("std");
-const vk     = @import("vulkan");
+const vk     = @import("vulkan-zig");
 const CFG = @import("../../config.zig");
 const core   = @import("../../core/core.zig");
 const ResourceHandle = core.ResourceHandle;

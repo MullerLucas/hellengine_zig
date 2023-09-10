@@ -8,7 +8,7 @@ pub usingnamespace @cImport({
     @cInclude("GLFW/glfw3native.h");
 });
 
-const vk = @import("vulkan");
+const vk = @import("vulkan-zig");
 const c  = @This();
 
 

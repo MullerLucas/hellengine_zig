@@ -1,9 +1,5 @@
 none:
 - This
 
-MIT:
-= https://spdx.org/licenses/MIT
-- git https://github.com/Snektron/vulkan-zig
-
 Unspecified:
 - git https://github.com/kooparse/zalgebra

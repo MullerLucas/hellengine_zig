@@ -2,7 +2,7 @@ const std       = @import("std");
 const assert    = std.debug.assert;
 const Allocator = std.mem.Allocator;
 
-const vk        = @import("vulkan");
+const vk        = @import("vulkan-zig");
 const za        = @import("zalgebra");
 const engine    = @import("../../engine.zig");
 const resources = @import("resources");

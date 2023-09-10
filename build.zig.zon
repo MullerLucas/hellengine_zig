@@ -1,0 +1,10 @@
+.{
+    .name = "hellengine_zig",
+    .version = "0.1.0",
+    .dependencies = .{
+        .@"vulkan-zig" = .{
+            .url = "https://github.com/Snektron/vulkan-zig/archive/348ac5d.tar.gz",
+            .hash = "1220ccc7294f75dda40974d6bc1044be097e4e559b0f25024d4a68d7aab9f8fff304",
+        },
+    },
+}

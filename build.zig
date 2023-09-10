@@ -1,8 +1,6 @@
 const std = @import("std");
-
 const deps = @import("deps.zig");
-const vkgen = deps.imports.vk_gen;
-const vkbuild = deps.imports.vk_build;
+const ShaderCompileStep = @import("vulkan-zig").ShaderCompileStep;
 
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
@@ -16,42 +14,54 @@ pub fn build(b: *std.Build) !void {
         .optimize = optimize,
     });
 
-    const gen = vkgen.VkGenerateStep.create(b, "vk.xml");
-    exe.addModule("vulkan", gen.getModule());
+    // add vulkan-zig
+    {
+        const vkzig_dep = b.dependency("vulkan-zig", .{
+            .registry = @as([]const u8, b.pathFromRoot("vk.xml")),
+        });
+        const vkzig_bindings = vkzig_dep.module("vulkan-zig");
+        exe.addModule("vulkan-zig", vkzig_bindings);
+    }
 
-    const shaders = vkgen.ShaderCompileStep.create(
-        b,
-        &[_][]const u8 { "glslc", "--target-env=vulkan1.2" },
-        "-o",
-    );
-    shaders.add("vert_27", "src/engine/shaders/27_shader_depth.vert", .{});
-    shaders.add("frag_27", "src/engine/shaders/27_shader_depth.frag", .{});
-    exe.addModule("resources", shaders.getModule());
+    // add shaders
+    {
+        const shaders = ShaderCompileStep.create(
+            b,
+            &[_][]const u8 { "glslc", "--target-env=vulkan1.2" },
+            "-o",
+        );
+        shaders.add("vert_27", "src/engine/shaders/27_shader_depth.vert", .{});
+        shaders.add("frag_27", "src/engine/shaders/27_shader_depth.frag", .{});
+        exe.addModule("resources", shaders.getModule());
+    }
 
-    exe.linkLibC();
-    exe.linkSystemLibrary("glfw3");
+    // add stb
+    {
+        const stb_path = std.Build.LazyPath.relative("lib/stb/include");
+        exe.addIncludePath(stb_path);
 
-    const stb_path = std.Build.LazyPath.relative("lib/stb/include");
-    exe.addIncludePath(stb_path);
+        exe.addCSourceFile(.{
+            .file  = std.Build.LazyPath.relative("lib/stb/stb_impl.c"),
+            .flags = &.{"-std=c99"},
+        });
+    }
 
-    exe.addCSourceFile(.{
-        .file  = std.Build.LazyPath.relative("lib/stb/stb_impl.c"),
-        .flags = &.{"-std=c99"},
-    });
+    // add zigmod dependencies
+    {
+        deps.addAllTo(exe);
+    }
 
-    // const hell_engine = b.createModule(.{
-    //     .source_file = std.Build.LazyPath.relative("lib/hell_engine/src/main.zig"),
-    // });
-    // exe.addModule("hell_engine", hell_engine);
-
-    // zigmod fetched deps
-    deps.addAllTo(exe);
-
+    // link libraries
+    {
+        exe.linkLibC();
+        exe.linkSystemLibrary("glfw3");
+    }
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
     // step when running `zig build`).
     b.installArtifact(exe);
+
 
     // This *creates* a Run step in the build graph, to be executed when another
     // step is evaluated that depends on it. The next line below will establish

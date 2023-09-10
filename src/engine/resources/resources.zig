@@ -1,10 +1,13 @@
 const std    = @import("std");
-const vk     = @import("vulkan");
+const vk     = @import("vulkan-zig");
 const engine = @import("../engine.zig");
+
+pub const obj_file = @import("obj_file.zig");
 
 const ResourceHandle  = engine.core.ResourceHandle;
 const SString128      = engine.core.string.SString128;
 pub const FrameNumber = engine.render.FrameNumber;
+pub const Logger      = engine.core.log.scoped(.resources);
 
 // @Todo
 const backend_resources = if (true)

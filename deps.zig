@@ -87,21 +87,16 @@ fn checkMinZig(current: std.SemanticVersion, exe: *std.build.LibExeObjStep) void
 pub const dirs = struct {
     pub const _root = "";
     pub const _0dqv0c1jve2s = cache ++ "/../..";
-    pub const _uxw7q1ovyv4z = cache ++ "/git/github.com/Snektron/vulkan-zig";
-    pub const _axwlt109ladf = cache ++ "/git/github.com/kooparse/zalgebra";
+    pub const _n6fnnp8aof5h = cache ++ "/git/github.com/kooparse/zalgebra";
 };
 
 pub const package_data = struct {
     pub var _0dqv0c1jve2s = Package{
         .directory = dirs._0dqv0c1jve2s,
     };
-    pub var _uxw7q1ovyv4z = Package{
-        .directory = dirs._uxw7q1ovyv4z,
-        .pkg = Pkg{ .name = "vk_gen", .source = .{ .path = dirs._uxw7q1ovyv4z ++ "/generator/index.zig" }, .dependencies = &.{} },
-    };
-    pub var _axwlt109ladf = Package{
-        .directory = dirs._axwlt109ladf,
-        .pkg = Pkg{ .name = "zalgebra", .source = .{ .path = dirs._axwlt109ladf ++ "/src/main.zig" }, .dependencies = &.{} },
+    pub var _n6fnnp8aof5h = Package{
+        .directory = dirs._n6fnnp8aof5h,
+        .pkg = Pkg{ .name = "zalgebra", .source = .{ .path = dirs._n6fnnp8aof5h ++ "/src/main.zig" }, .dependencies = &.{} },
     };
     pub var _root = Package{
         .directory = dirs._root,
@@ -109,18 +104,12 @@ pub const package_data = struct {
 };
 
 pub const packages = &[_]*Package{
-    &package_data._uxw7q1ovyv4z,
-    &package_data._uxw7q1ovyv4z,
-    &package_data._axwlt109ladf,
+    &package_data._n6fnnp8aof5h,
 };
 
 pub const pkgs = struct {
-    pub const vk_gen = &package_data._uxw7q1ovyv4z;
-    pub const vk_build = &package_data._uxw7q1ovyv4z;
-    pub const zalgebra = &package_data._axwlt109ladf;
+    pub const zalgebra = &package_data._n6fnnp8aof5h;
 };
 
 pub const imports = struct {
-    pub const vk_gen = @import(".zigmod/deps/git/github.com/Snektron/vulkan-zig/generator/index.zig");
-    pub const vk_build = @import(".zigmod/deps/git/github.com/Snektron/vulkan-zig/build.zig");
 };

@@ -1,4 +1,4 @@
-const vk     = @import("vulkan");
+const vk     = @import("vulkan-zig");
 const std    = @import("std");
 const engine = @import("../../engine/engine.zig");
 
