@@ -1,14 +1,8 @@
-pub const log = @import("log.zig");
+pub usingnamespace @import("core_types.zig");
 
-const core_types = @import("core_types.zig");
-pub const ResourceHandle = core_types.ResourceHandle;
-pub const Range = core_types.Range;
-pub const MemRange = core_types.MemRange;
-
-pub const SlotArray = @import("slot_array.zig").SlotArray;
+pub const log        = @import("log.zig");
+pub const SlotArray  = @import("slot_array.zig").SlotArray;
 pub const StackArray = @import("stack_array.zig").StackArray;
-pub const time = @import("time.zig");
-
-pub const string = @import("string/string.zig");
-
-pub const utils = @import("utils.zig");
+pub const time       = @import("time.zig");
+pub const string     = @import("string/string.zig");
+pub const utils      = @import("utils.zig");

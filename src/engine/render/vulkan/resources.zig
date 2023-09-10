@@ -1,22 +1,24 @@
-const core   = @import("../../core/core.zig");
-const ResourceHandle = core.ResourceHandle;
-
+const engine = @import("../../engine.zig");
+const ResourceHandle = engine.core.ResourceHandle;
 
 // ----------------------------------------------
 
-pub const TextureInternals = struct {
+pub const TextureInternals = struct
+{
     image_h: ResourceHandle = ResourceHandle.invalid,
 };
 
 // ----------------------------------------------
 
-pub const MaterialInternals = struct {
+pub const MaterialInternals = struct
+{
     instance_h: ResourceHandle = ResourceHandle.invalid,
 };
 
 // ----------------------------------------------
 
-pub const GeometryInternals = struct {
+pub const GeometryInternals = struct
+{
     vertex_buffer_h: ResourceHandle = ResourceHandle.invalid,
     index_buffer_h:  ResourceHandle = ResourceHandle.invalid,
 };

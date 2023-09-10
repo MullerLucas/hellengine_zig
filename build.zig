@@ -31,14 +31,18 @@ pub fn build(b: *std.Build) !void {
     exe.linkLibC();
     exe.linkSystemLibrary("glfw3");
 
-    // const stb_path = std.Build.LazyPath.relative(deps.cache ++ "/git/github.com/nothings/stb");
-    const stb_path = std.Build.LazyPath.relative("include/stb");
+    const stb_path = std.Build.LazyPath.relative("lib/stb/include");
     exe.addIncludePath(stb_path);
 
     exe.addCSourceFile(.{
-        .file  = std.Build.LazyPath.relative("libs/stb/stb_impl.c"),
+        .file  = std.Build.LazyPath.relative("lib/stb/stb_impl.c"),
         .flags = &.{"-std=c99"},
     });
+
+    // const hell_engine = b.createModule(.{
+    //     .source_file = std.Build.LazyPath.relative("lib/hell_engine/src/main.zig"),
+    // });
+    // exe.addModule("hell_engine", hell_engine);
 
     // zigmod fetched deps
     deps.addAllTo(exe);

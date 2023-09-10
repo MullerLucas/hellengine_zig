@@ -1,42 +1,43 @@
-const std = @import("std");
-const c = @import("../c.zig");
-
-
-const GlfwWindow = @import("../GlfwWindow.zig");
-
-const core   = @import("../core/core.zig");
-const ResourceHandle = core.ResourceHandle;
-const FrameTimer = core.time.FrameTimer(4096);
-
-const vulkan        = @import("./vulkan/vulkan.zig");
-const VulkanBackend = vulkan.VulkanBackend;
-
-const render     = @import("render.zig");
-const Logger     = render.Logger;
-const RenderData = render.RenderData;
-
-const ShaderProgram = render.ShaderProgram;
-const ShaderInfo = render.ShaderInfo;
-const ShaderScope = render.shader.ShaderScope;
-
+const std    = @import("std");
+const c      = @import("../c.zig");
 const engine = @import("../engine.zig");
-const Vertex   = engine.resources.Vertex;
-const ObjFace  = engine.resources.obj_file.ObjFace;
-const ObjParseState = engine.resources.obj_file.ObjFileParseState;
-const Texture  = engine.resources.Texture;
-const Material = engine.resources.Material;
-const MaterialCreateInfo = engine.resources.MaterialCreateInfo;
-const Geometry = engine.resources.Geometry;
-const GeometryConfig = engine.resources.GeometryConfig;
-const GeometryInternals = engine.render.vulkan.resources.GeometryInternals;
 
-const obj_file = engine.resources.obj_file;
+const ResourceHandle = engine.core.ResourceHandle;
+const FrameTimer     = engine.core.time.FrameTimer(4096);
+
+const VulkanBackend = engine.render.vulkan.VulkanBackend;
+
+const Logger     = engine.render.Logger;
+const RenderData = engine.render.RenderData;
+
+const GlfwWindow    = engine.render.GlfwWindow;
+const ShaderScope   = engine.render.shader.ShaderScope;
+const ShaderProgram = engine.render.shader.ShaderProgram;
+const ShaderInfo    = engine.render.shader.ShaderInfo;
+
+const Vertex             = engine.resources.Vertex;
+const Texture            = engine.resources.Texture;
+const Material           = engine.resources.Material;
+const MaterialCreateInfo = engine.resources.MaterialCreateInfo;
+const Geometry           = engine.resources.Geometry;
+const GeometryConfig     = engine.resources.GeometryConfig;
+const GeometryInternals  = engine.render.vulkan.resources.GeometryInternals;
+
+const ObjFace                    = engine.resources.obj_file.ObjFace;
+const ObjParseState              = engine.resources.obj_file.ObjFileParseState;
+const ObjFileParseResult         = engine.resources.obj_file.ObjFileParseResult;
+const ObjFileLoader              = engine.resources.obj_file.ObjFileLoader;
+const ObjMaterialFileParseResult = engine.resources.obj_file.ObjMaterialFileParseResult;
+
+
+
 
 // ----------------------------------------------
 
-pub const Renderer = struct {
+pub const Renderer = struct
+{
     // @Todo: come up with sensible values
-    const geometry_limit:     usize = 1024;
+    const geometry_limit: usize = 1024;
     const texture_limit:  usize = 1024;
     const material_limit: usize = 1024;
     const program_limit:  usize = 1024;
@@ -44,18 +45,19 @@ pub const Renderer = struct {
     allocator:   std.mem.Allocator,
     frame_timer: FrameTimer,
     backend:     VulkanBackend,
-    geometries:  core.StackArray(Geometry, geometry_limit) = .{},
-    textures:    core.StackArray(Texture,  texture_limit) = .{},
-    materials:   core.StackArray(Material, material_limit) = .{},
-    programs:    core.StackArray(*ShaderProgram, program_limit) = .{},
+    geometries:  engine.core.StackArray(Geometry, geometry_limit) = .{},
+    textures:    engine.core.StackArray(Texture,  texture_limit) = .{},
+    materials:   engine.core.StackArray(Material, material_limit) = .{},
+    programs:    engine.core.StackArray(*ShaderProgram, program_limit) = .{},
 
     current_frame: usize = 0,
 
 
-    pub fn init(allocator: std.mem.Allocator, window: *GlfwWindow) !Renderer {
+    pub fn init(allocator: std.mem.Allocator, window: *GlfwWindow) !Renderer
+    {
         Logger.info("initializing renderer-frontend\n", .{});
 
-        var timer = try core.time.SimpleTimer.init();
+        var timer = try engine.core.time.SimpleTimer.init();
         defer Logger.debug("renderer initialized in {} us\n", .{timer.read_us()});
 
         var self = Renderer {
@@ -65,37 +67,42 @@ pub const Renderer = struct {
         };
 
         try self.create_default_material();
-
         return self;
     }
 
-    pub fn deinit(self: *Renderer) void {
+    pub fn deinit(self: *Renderer) void
+    {
         Logger.info("deinitializing renderer-frontend\n", .{});
 
         // @Hack
-        for (0..self.textures.len) |idx| {
+        for (0..self.textures.len) |idx|
+        {
             self.destroy_texture(ResourceHandle { .value = idx });
         }
 
         self.backend.deinit();
     }
 
-    pub fn begin_frame(self: *Renderer) void {
+    pub fn begin_frame(self: *Renderer) void
+    {
         self.current_frame += 1;
     }
 
-    pub fn end_frame(self: *Renderer) void {
+    pub fn end_frame(self: *Renderer) void
+    {
         _ = self;
     }
 
-    pub fn draw_geometries(self: *Renderer, geometries_h: []const ResourceHandle, program: *ShaderProgram) !void {
+    pub fn draw_geometries(self: *Renderer, geometries_h: []const ResourceHandle, program: *ShaderProgram) !void
+    {
         if (self.frame_timer.is_frame_0()) {
             Logger.debug("Timings - frame (us): {}\n", .{self.frame_timer.avg_frame_time_us()});
         }
 
         // @Perf: order geometries in a useful way
         var render_data = RenderData {};
-        for (geometries_h) |geometry_h| {
+        for (geometries_h) |geometry_h|
+        {
             render_data.geometries.push(self.get_geometry(geometry_h));
         }
 
@@ -104,7 +111,8 @@ pub const Renderer = struct {
         try self.backend.start_render_pass(&program.info, &program.internals);
 
         // iterate geometries
-        for (render_data.geometries.as_slice(), 0..) |geometry, idx| {
+        for (render_data.geometries.as_slice(), 0..) |geometry, idx|
+        {
             try self.backend.upload_shader_data(&program.internals, geometry, idx);
 
             // @Perf: don't switch materials on a per geometry basis
@@ -119,13 +127,15 @@ pub const Renderer = struct {
         self.frame_timer.stop_frame();
     }
 
-    pub fn device_wait_idle(self: *Renderer) !void {
+    pub fn device_wait_idle(self: *Renderer) !void
+    {
         try self.backend.wait_device_idle();
     }
 
     // ------------------------------------------
 
-    pub fn create_shader_program(self: *Renderer, info: ShaderInfo) !ResourceHandle {
+    pub fn create_shader_program(self: *Renderer, info: ShaderInfo) !ResourceHandle
+    {
         const program_h = ResourceHandle { .value = self.programs.len };
         Logger.debug("creating shader-program '{}'\n", .{program_h.value});
 
@@ -139,7 +149,8 @@ pub const Renderer = struct {
         return program_h;
     }
 
-    pub fn destroy_shader_program(self: *Renderer, program_h: ResourceHandle) void {
+    pub fn destroy_shader_program(self: *Renderer, program_h: ResourceHandle) void
+    {
         Logger.debug("destroy shader-program\n", .{});
 
         const program = self.get_shader_program_mut(program_h);
@@ -148,18 +159,21 @@ pub const Renderer = struct {
         self.allocator.destroy(program);
     }
 
-    pub fn get_shader_program(self: *const Renderer, program_h: ResourceHandle) *const ShaderProgram {
+    pub fn get_shader_program(self: *const Renderer, program_h: ResourceHandle) *const ShaderProgram
+    {
         return self.programs.get(program_h.value).*;
     }
 
-    pub fn get_shader_program_mut(self: *Renderer, program_h: ResourceHandle) *ShaderProgram {
+    pub fn get_shader_program_mut(self: *Renderer, program_h: ResourceHandle) *ShaderProgram
+    {
         return self.programs.get_mut(program_h.value).*;
     }
 
     // ------------------------------------------
 
     // @Todo: move somewhere else
-    pub fn create_raw_image_from_file(path: [*:0]const u8) !engine.resources.RawImage {
+    pub fn create_raw_image_from_file(path: [*:0]const u8) !engine.resources.RawImage
+    {
         var width:    c_int = undefined;
         var height:   c_int = undefined;
         var channels: c_int = undefined;
@@ -167,7 +181,8 @@ pub const Renderer = struct {
         var pixels: ?[*]u8 = c.stbi_load(path, &width, &height, &channels, c.STBI_rgb_alpha);
         errdefer c.stbi_image_free(pixels);
 
-        if (pixels == null) {
+        if (pixels == null)
+        {
             Logger.err("failed to load image '{s}'\n", .{path});
             return error.ImageLoadFailure;
         }
@@ -180,11 +195,13 @@ pub const Renderer = struct {
     }
 
     // @Todo: move somewhere else
-    pub fn destroy_raw_image(image: *engine.resources.RawImage) void {
+    pub fn destroy_raw_image(image: *engine.resources.RawImage) void
+    {
         c.stbi_image_free(image.pixels);
     }
 
-    pub fn create_texture(self: *Renderer, path: [*:0]const u8) !ResourceHandle {
+    pub fn create_texture(self: *Renderer, path: [*:0]const u8) !ResourceHandle
+    {
         const texture_h = ResourceHandle { .value = self.textures.len };
         Logger.debug("create texture '{}' from path '{s}\n", .{texture_h.value, path});
 
@@ -209,23 +226,27 @@ pub const Renderer = struct {
         return texture_h;
     }
 
-    pub fn destroy_texture(self: *Renderer, texture_h: ResourceHandle) void {
+    pub fn destroy_texture(self: *Renderer, texture_h: ResourceHandle) void
+    {
         Logger.debug("destroy texture '{}'\n", .{texture_h.value});
         const texture = self.get_texture_mut(texture_h);
         self.backend.destroy_texture_internals(texture);
     }
 
-    pub fn get_texture(self: *const Renderer, texture_h: ResourceHandle) *const Texture {
+    pub fn get_texture(self: *const Renderer, texture_h: ResourceHandle) *const Texture
+    {
         return self.textures.get(texture_h.value);
     }
 
-    pub fn get_texture_mut(self: *Renderer, texture_h: ResourceHandle) *Texture {
+    pub fn get_texture_mut(self: *Renderer, texture_h: ResourceHandle) *Texture
+    {
         return self.textures.get_mut(texture_h.value);
     }
 
     // ------------------------------------------
 
-    pub fn create_material(self: *Renderer, program_h: ResourceHandle, create_info: *const MaterialCreateInfo) !ResourceHandle {
+    pub fn create_material(self: *Renderer, program_h: ResourceHandle, create_info: *const MaterialCreateInfo) !ResourceHandle
+    {
         const material_h = ResourceHandle { .value = self.materials.len };
         Logger.debug("creating material '{}'\n", .{material_h.value});
 
@@ -247,11 +268,11 @@ pub const Renderer = struct {
         const texture = self.get_texture(material.textures_h[0]);
         self.backend.shader_set_material_texture_image(&program.internals, &material.internals, &texture.internals);
 
-
         return material_h;
     }
 
-    pub fn destroy_material(self: *Renderer, material_h: ResourceHandle) void {
+    pub fn destroy_material(self: *Renderer, material_h: ResourceHandle) void
+    {
         Logger.debug("destroying material '{}'\n", .{material_h.value});
         const material = self.get_material_mut(material_h);
         self.backend.destroy_material_internals(material);
@@ -259,25 +280,30 @@ pub const Renderer = struct {
     }
 
     // @Todo: actually implement
-    pub fn create_default_material(_: *Renderer) !void {
+    pub fn create_default_material(_: *Renderer) !void
+    {
         Logger.err("@Todo: create default material\n", .{});
     }
 
     // @Todo: actually implement
-    pub fn get_default_material() ResourceHandle {
+    pub fn get_default_material() ResourceHandle
+    {
         return ResourceHandle.zero;
     }
 
-    pub fn get_material(self: *Renderer, material_h: ResourceHandle) *const Material {
+    pub fn get_material(self: *Renderer, material_h: ResourceHandle) *const Material
+    {
         return self.materials.get(material_h.value);
     }
 
-    pub fn get_material_mut(self: *Renderer, material_h: ResourceHandle) *Material {
+    pub fn get_material_mut(self: *Renderer, material_h: ResourceHandle) *Material
+    {
         return self.materials.get_mut(material_h.value);
     }
 
     // @Todo: actually implement
-    pub fn find_material(self: *const Renderer, material_name: []const u8) ?ResourceHandle {
+    pub fn find_material(self: *const Renderer, material_name: []const u8) ?ResourceHandle
+    {
         for (self.materials.as_slice(), 0..) |material, idx| {
             if (material.info.name.eql_slice(material_name)) {
                 // @Hack
@@ -289,7 +315,8 @@ pub const Renderer = struct {
 
     // ------------------------------------------
 
-    pub fn create_geometries_from_file(self: *Renderer, path: []const u8, program_h: ResourceHandle) !std.ArrayList(ResourceHandle) {
+    pub fn create_geometries_from_file(self: *Renderer, path: []const u8, program_h: ResourceHandle) !std.ArrayList(ResourceHandle)
+    {
         Logger.debug("creating geometry '{}' from file '{s}'\n", .{self.geometries.len, path});
 
         const geo_file = std.fs.cwd().openFile(path, .{}) catch |err| {
@@ -299,8 +326,8 @@ pub const Renderer = struct {
         defer geo_file.close();
         var geo_reader = std.io.bufferedReader(geo_file.reader());
 
-        var geo_result = obj_file.ObjFileParseResult.init(self.allocator);
-        try obj_file.ObjFileLoader.parse_obj_file(self.allocator, geo_reader.reader(), &geo_result);
+        var geo_result = ObjFileParseResult.init(self.allocator);
+        try ObjFileLoader.parse_obj_file(self.allocator, geo_reader.reader(), &geo_result);
         defer geo_result.deinit();
 
         // create materials
@@ -319,9 +346,9 @@ pub const Renderer = struct {
             defer mat_file.close();
             var mat_reader = std.io.bufferedReader(mat_file.reader());
 
-            var mat_result = obj_file.ObjMaterialFileParseResult.init(self.allocator);
+            var mat_result = ObjMaterialFileParseResult.init(self.allocator);
             defer mat_result.deinit();
-            try obj_file.ObjFileLoader.parse_obj_material_file(self.allocator, mat_reader.reader(), &mat_result, dirname);
+            try ObjFileLoader.parse_obj_material_file(self.allocator, mat_reader.reader(), &mat_result, dirname);
 
             // @Todo: use mat_result
             for (mat_result.create_infos.items) |create_info| {
@@ -338,11 +365,11 @@ pub const Renderer = struct {
             try geometries_h.append(try self.create_geometry(&config));
         }
 
-
         return geometries_h;
     }
 
-    pub fn create_geometry(self: *Renderer, config: *GeometryConfig) !ResourceHandle {
+    pub fn create_geometry(self: *Renderer, config: *GeometryConfig) !ResourceHandle
+    {
         var internals = GeometryInternals { };
         try self.backend.create_geometry_internals(config, &internals);
 
@@ -369,7 +396,8 @@ pub const Renderer = struct {
         return ResourceHandle { .value = self.geometries.len - 1 };
     }
 
-    pub fn destroy_geometry(self: *Renderer, geometry_h: ResourceHandle) void {
+    pub fn destroy_geometry(self: *Renderer, geometry_h: ResourceHandle) void
+    {
         const geometry = self.get_geometry_mut(geometry_h);
 
         self.backend.destroy_geometry_internals(geometry);
@@ -378,11 +406,13 @@ pub const Renderer = struct {
         self.allocator.free(geometry.indices);
     }
 
-    pub fn get_geometry(self: *const Renderer, geometry_h: ResourceHandle) *const Geometry{
+    pub fn get_geometry(self: *const Renderer, geometry_h: ResourceHandle) *const Geometry
+    {
         return self.geometries.get(geometry_h.value);
     }
 
-    pub fn get_geometry_mut(self: *Renderer, geometry_h: ResourceHandle) *Geometry{
+    pub fn get_geometry_mut(self: *Renderer, geometry_h: ResourceHandle) *Geometry
+    {
         return self.geometries.get_mut(geometry_h.value);
     }
 };

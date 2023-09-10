@@ -10,8 +10,8 @@ const core   = engine.core;
 const Logger = core.log.scoped(.app);
 const ResourceHandle = core.ResourceHandle;
 
-const ShaderInfo  = render.ShaderInfo;
-const ShaderProgram = render.ShaderProgram;
+const ShaderInfo    = render.shader.ShaderInfo;
+const ShaderProgram = render.shader.ShaderProgram;
 const ShaderScope   = render.shader.ShaderScope;
 
 const za = @import("zalgebra");

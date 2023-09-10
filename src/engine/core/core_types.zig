@@ -4,24 +4,28 @@ const std = @import("std");
 
 // ----------------------------------------------------------------------------
 
-pub const ResourceHandle = struct {
+pub const ResourceHandle = struct
+{
     pub const zero: ResourceHandle    = .{ .value = 0 };
     pub const invalid: ResourceHandle = .{ .value = std.math.maxInt(usize) };
 
     value: usize,
 
-    pub fn eql(self: ResourceHandle, other: ResourceHandle) bool {
+    pub fn eql(self: ResourceHandle, other: ResourceHandle) bool
+    {
         return self.value == other.value;
     }
 
-    pub fn is_valid(self: ResourceHandle) bool {
+    pub fn is_valid(self: ResourceHandle) bool
+    {
         return self.value != invalid.value;
     }
 };
 
 // ----------------------------------------------------------------------------
 
-pub fn Range(comptime T: type) type {
+pub fn Range(comptime T: type) type
+{
     return struct {
         offset: T,
         size: T,
