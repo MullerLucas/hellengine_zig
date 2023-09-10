@@ -1,20 +1,18 @@
 const std = @import("std");
+const za = @import("zalgebra");
 
 const engine     = @import("engine/engine.zig");
-const render     = engine.render;
-const Renderer   = render.Renderer;
-const RenderData = render.RenderData;
-const Vertex     = render.Vertex;
+const Renderer      = engine.render.Renderer;
+const RenderData    = engine.render.RenderData;
+const Vertex        = engine.render.Vertex;
+const ShaderInfo    = engine.render.shader.ShaderInfo;
+const ShaderProgram = engine.render.shader.ShaderProgram;
+const ShaderScope   = engine.render.shader.ShaderScope;
 
-const core   = engine.core;
-const Logger = core.log.scoped(.app);
-const ResourceHandle = core.ResourceHandle;
+const Logger = engine.logging.scoped(.app);
+const ResourceHandle = engine.utils.ResourceHandle;
+const StackArray = engine.collections.StackArray;
 
-const ShaderInfo    = render.shader.ShaderInfo;
-const ShaderProgram = render.shader.ShaderProgram;
-const ShaderScope   = render.shader.ShaderScope;
-
-const za = @import("zalgebra");
 
 // ----------------------------------------------g
 
@@ -22,12 +20,12 @@ pub const TestScene = struct {
 
     renderer:    *Renderer,
     program_h:   ResourceHandle = ResourceHandle.invalid,
-    meshes_h:    core.StackArray(ResourceHandle, 64) = .{},
+    meshes_h:    StackArray(ResourceHandle, 64) = .{},
 
     pub fn init(allocator: std.mem.Allocator, renderer: *Renderer) !TestScene {
         Logger.info("initializing test-scene\n", .{});
 
-        var timer = try core.time.SimpleTimer.init();
+        var timer = try engine.time.SimpleTimer.init();
         defer Logger.debug("test-scene initialized in {} us\n", .{timer.read_us()});
 
         var self = TestScene {

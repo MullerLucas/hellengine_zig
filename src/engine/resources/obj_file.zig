@@ -8,6 +8,7 @@ const Logger             = engine.resources.Logger;
 const Vertex             = engine.resources.Vertex;
 
 const ResourceHandle = engine.core.ResourceHandle;
+const StackArray     = engine.collections.StackArray;
 
 /// offsets start @ 1, not 0
 pub const ObjFace = struct
@@ -57,7 +58,7 @@ pub const ObjFileParseState = struct
 
 pub const ObjFileParseResult = struct
 {
-    pub const MatlibPath = engine.core.StackArray(u8, 512);
+    pub const MatlibPath = StackArray(u8, 512);
     pub const GeometryConfigList = std.ArrayList(GeometryConfig);
 
     geometry_configs: GeometryConfigList,

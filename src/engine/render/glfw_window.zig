@@ -3,7 +3,7 @@
 
 const engine = @import("../engine.zig");
 const render = engine.render;
-const Logger = engine.core.log.scoped(.hell);
+const Logger = engine.logging.scoped(.hell);
 const c      = engine.c;
 
 // ----------------------------------------------------------------------------

@@ -1,8 +1,6 @@
 const std = @import("std");
-const engine = @import("../../engine.zig");
-const Logger = engine.core.log.scoped(.core);
+const engine = @import("../engine.zig");
 
-pub usingnamespace @import("./stack_string.zig");
 
 pub const String = struct
 {

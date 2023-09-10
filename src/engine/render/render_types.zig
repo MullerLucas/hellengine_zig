@@ -6,8 +6,9 @@ const engine    = @import("../../engine/engine.zig");
 const assert = std.debug.assert;
 
 const ResourceHandle = engine.core.core_types.ResourceHandle;
-const Geometry       = engine.resources.Geometry;
 const Logger         = engine.core.log.scoped(.render);
+const StackArray     = engine.collections.StackArray;
+const Geometry       = engine.resources.Geometry;
 
 
 // ----------------------------------------------
@@ -39,7 +40,7 @@ pub const SceneShaderData = extern struct
 pub const RenderData = struct
 {
     pub const geometry_limit: usize = 1024;
-    geometries: engine.core.StackArray(*const Geometry, geometry_limit) = .{},
+    geometries: StackArray(*const Geometry, geometry_limit) = .{},
 };
 
 // ----------------------------------------------

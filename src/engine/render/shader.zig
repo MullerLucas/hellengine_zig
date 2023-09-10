@@ -3,11 +3,13 @@ const std    = @import("std");
 const engine = @import("../../engine/engine.zig");
 
 const ResourceHandle = engine.core.ResourceHandle;
-const Logger         = engine.core.log.scoped(.render);
-const String         = engine.core.string.String;
+const Logger         = engine.logging.scoped(.render);
+const String         = engine.string.String;
 
 const NumberFormat    = engine.render.NumberFormat;
 const ShaderInternals = engine.render.vulkan.ShaderInternals;
+
+const StackArray = engine.collections.StackArray;
 
 // ----------------------------------------------
 
@@ -27,7 +29,7 @@ pub const ShaderAttributeInfo = struct
     location: usize,
 };
 
-pub const ShaderAttributeInfoArray = engine.core.StackArray(ShaderAttributeInfo, engine.config.max_attributes_per_shader);
+pub const ShaderAttributeInfoArray = StackArray(ShaderAttributeInfo, engine.config.max_attributes_per_shader);
 
 // ----------------------------------------------
 
@@ -47,7 +49,7 @@ pub const ShaderUniformInfo = struct
     size: usize,
 };
 
-pub const ShaderUniformInfoArray = engine.core.StackArray(ShaderUniformInfo, engine.config.max_uniform_buffers_per_shader);
+pub const ShaderUniformInfoArray = StackArray(ShaderUniformInfo, engine.config.max_uniform_buffers_per_shader);
 
 // ----------------------------------------------
 
@@ -56,7 +58,7 @@ pub const ShaderSamplerInfo = struct
     name: String,
 };
 
-pub const ShaderSamplerInfoArray = engine.core.StackArray(ShaderSamplerInfo, engine.config.max_uniform_samplers_per_shader);
+pub const ShaderSamplerInfoArray = StackArray(ShaderSamplerInfo, engine.config.max_uniform_samplers_per_shader);
 
 // ----------------------------------------------
 

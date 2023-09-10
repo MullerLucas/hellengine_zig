@@ -1,5 +1,5 @@
 const engine = @import("../../engine.zig");
-const ResourceHandle = engine.core.ResourceHandle;
+const ResourceHandle = engine.utils.ResourceHandle;
 
 // ----------------------------------------------
 

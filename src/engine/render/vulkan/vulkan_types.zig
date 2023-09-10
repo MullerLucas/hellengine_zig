@@ -1,11 +1,13 @@
 const std    = @import("std");
 const vk     = @import("vulkan-zig");
-const CFG = @import("../../config.zig");
-const core   = @import("../../core/core.zig");
-const ResourceHandle = core.ResourceHandle;
+const engine = @import("../../../engine/engine.zig");
 const render = @import("../render.zig");
-const ShaderScope = render.shader.ShaderScope;
-const MemRange = core.MemRange;
+
+const ResourceHandle = engine.utils.ResourceHandle;
+const MemRange       = engine.utils.MemRange;
+const ShaderScope    = render.shader.ShaderScope;
+const CFG            = engine.config;
+const StackArray     = engine.collections.StackArray;
 
 // ----------------------------------------------
 
@@ -182,7 +184,7 @@ pub const GraphicsPipeline = struct
 
 // ----------------------------------------------
 
-pub const ShaderAttributeArray = core.StackArray(vk.VertexInputAttributeDescription, CFG.max_attributes_per_shader);
+pub const ShaderAttributeArray = StackArray(vk.VertexInputAttributeDescription, CFG.max_attributes_per_shader);
 
 pub const ShaderInternals = struct
 {
@@ -232,7 +234,7 @@ pub const ShaderScopeInternals = struct
     descriptor_set_layout: vk.DescriptorSetLayout = .null_handle,
 
     // TODO(lm): optimize - most scopes only have one instance
-    instances: core.StackArray(ShaderInstanceInternals, CFG.max_scope_instances_per_shader) = .{},
+    instances: StackArray(ShaderInstanceInternals, CFG.max_scope_instances_per_shader) = .{},
 };
 
 // ----------------------------------------------
@@ -251,7 +253,7 @@ pub const PushConstantInternals = struct
     range: MemRange,
 };
 
-pub const PushConstantInternalsStack = core.StackArray(PushConstantInternals, CFG.vulkan_push_constant_stack_limit);
+pub const PushConstantInternalsStack = StackArray(PushConstantInternals, CFG.vulkan_push_constant_stack_limit);
 
 // ----------------------------------------------
 

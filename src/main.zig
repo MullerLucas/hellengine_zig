@@ -1,8 +1,7 @@
 const std = @import("std");
 
 const engine = @import("engine/engine.zig");
-const core = engine.core;
-const Logger = core.log.scoped(.app);
+const Logger = engine.logging.scoped(.app);
 const Renderer = engine.render.Renderer;
 
 const GlfwWindow = engine.render.GlfwWindow;

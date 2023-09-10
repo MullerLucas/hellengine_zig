@@ -2,8 +2,8 @@ const std    = @import("std");
 const c      = @import("../c.zig");
 const engine = @import("../engine.zig");
 
-const ResourceHandle = engine.core.ResourceHandle;
-const FrameTimer     = engine.core.time.FrameTimer(4096);
+const ResourceHandle = engine.utils.ResourceHandle;
+const FrameTimer     = engine.time.FrameTimer(4096);
 
 const VulkanBackend = engine.render.vulkan.VulkanBackend;
 
@@ -29,6 +29,8 @@ const ObjFileParseResult         = engine.resources.obj_file.ObjFileParseResult;
 const ObjFileLoader              = engine.resources.obj_file.ObjFileLoader;
 const ObjMaterialFileParseResult = engine.resources.obj_file.ObjMaterialFileParseResult;
 
+const StackArray = engine.collections.StackArray;
+
 
 
 
@@ -45,10 +47,10 @@ pub const Renderer = struct
     allocator:   std.mem.Allocator,
     frame_timer: FrameTimer,
     backend:     VulkanBackend,
-    geometries:  engine.core.StackArray(Geometry, geometry_limit) = .{},
-    textures:    engine.core.StackArray(Texture,  texture_limit) = .{},
-    materials:   engine.core.StackArray(Material, material_limit) = .{},
-    programs:    engine.core.StackArray(*ShaderProgram, program_limit) = .{},
+    geometries:  StackArray(Geometry, geometry_limit) = .{},
+    textures:    StackArray(Texture,  texture_limit) = .{},
+    materials:   StackArray(Material, material_limit) = .{},
+    programs:    StackArray(*ShaderProgram, program_limit) = .{},
 
     current_frame: usize = 0,
 
@@ -57,7 +59,7 @@ pub const Renderer = struct
     {
         Logger.info("initializing renderer-frontend\n", .{});
 
-        var timer = try engine.core.time.SimpleTimer.init();
+        var timer = try engine.time.SimpleTimer.init();
         defer Logger.debug("renderer initialized in {} us\n", .{timer.read_us()});
 
         var self = Renderer {

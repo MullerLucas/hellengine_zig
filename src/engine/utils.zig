@@ -1,7 +1,5 @@
 const std = @import("std");
 
-
-
 // ----------------------------------------------------------------------------
 
 pub const ResourceHandle = struct
@@ -33,5 +31,20 @@ pub fn Range(comptime T: type) type
 }
 
 pub const MemRange = Range(usize);
+
+// ----------------------------------------------------------------------------
+
+pub fn get_aligned(operand: usize, granularity: usize) usize
+{
+    return ((operand + (granularity - 1)) & ~(granularity - 1));
+}
+
+pub fn get_aligned_range(offset: usize, size: usize, granularity: usize) MemRange
+{
+    return .{
+        .offset = get_aligned(offset, granularity),
+        .size   = get_aligned(size, granularity)
+    };
+}
 
 // ----------------------------------------------------------------------------

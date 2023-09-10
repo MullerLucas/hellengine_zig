@@ -1,21 +1,24 @@
-const std = @import("std");
-const core = @import("../core.zig");
-const StackArray = core.StackArray;
+const std    = @import("std");
+const engine = @import("../engine.zig");
 
+const StackArray = engine.collections.StackArray;
 
-pub const SString8    = StackString(8);
-pub const SString16   = StackString(16);
-pub const SString32   = StackString(32);
-pub const SString64   = StackString(64);
-pub const SString128  = StackString(128);
-pub const SString256  = StackString(256);
-pub const SString512  = StackString(512);
-pub const SString1024 = StackString(1024);
-pub const SString2048 = StackString(2048);
-pub const SString4096 = StackString(4096);
+// ----------------------------------------------
 
+pub const StringS8    = StringS(8);
+pub const StringS16   = StringS(16);
+pub const StringS32   = StringS(32);
+pub const StringS64   = StringS(64);
+pub const StringS128  = StringS(128);
+pub const StringS256  = StringS(256);
+pub const StringS512  = StringS(512);
+pub const StringS1024 = StringS(1024);
+pub const StringS2048 = StringS(2048);
+pub const StringS4096 = StringS(4096);
 
-pub fn StackString(comptime capacity: usize) type
+// ----------------------------------------------
+
+pub fn StringS(comptime capacity: usize) type
 {
     return struct
     {

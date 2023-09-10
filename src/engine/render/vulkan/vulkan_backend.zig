@@ -9,9 +9,11 @@ const resources = @import("resources");
 
 const CFG = engine.config;
 
-const SlotArray      = engine.core.SlotArray;
-const ResourceHandle = engine.core.ResourceHandle;
-const MemRange       = engine.core.MemRange;
+const SlotArray      = engine.collections.SlotArray;
+const ResourceHandle = engine.utils.ResourceHandle;
+const MemRange       = engine.utils.MemRange;
+
+const StackArray = engine.collections.StackArray;
 
 const RenderData    = engine.render.RenderData;
 const GlfwWindow    = engine.render.GlfwWindow;
@@ -57,9 +59,9 @@ const PUSH_CONSTANT_SCOPES = [_]ShaderScope { .object };
 
 // ----------------------------------------------
 
-const DescriptorSetLayoutBindingStack = engine.core.StackArray(vk.DescriptorSetLayoutBinding, 2);
-const DescriptorImageInfoStack        = engine.core.StackArray(vk.DescriptorImageInfo, CFG.max_uniform_samplers_per_shader);
-const PushConstantRangeStack          = engine.core.StackArray(vk.PushConstantRange, CFG.vulkan_push_constant_stack_limit);
+const DescriptorSetLayoutBindingStack = StackArray(vk.DescriptorSetLayoutBinding, 2);
+const DescriptorImageInfoStack        = StackArray(vk.DescriptorImageInfo, CFG.max_uniform_samplers_per_shader);
+const PushConstantRangeStack          = StackArray(vk.PushConstantRange, CFG.vulkan_push_constant_stack_limit);
 
 // ----------------------------------------------
 
@@ -1932,7 +1934,7 @@ pub const VulkanBackend = struct
                 {
                     Logger.debug("add push constant '{s}' with size '{}' to scope '{}'\n", .{scope_buffer.name.as_slice(), scope_buffer.size, scope});
 
-                    const range = engine.core.utils.get_aligned_range(0, scope_buffer.size, CFG.vulkan_push_constant_alignment);
+                    const range = engine.utils.get_aligned_range(0, scope_buffer.size, CFG.vulkan_push_constant_alignment);
                     internals.push_constant_internals.push(
                         .{
                             .range = range,
@@ -2189,7 +2191,7 @@ pub const VulkanBackend = struct
 
             // update descriptor sets
         {
-                var descriptor_writes = engine.core.StackArray(vk.WriteDescriptorSet, 2){};
+                var descriptor_writes = StackArray(vk.WriteDescriptorSet, 2){};
 
                 if (!scope_info.buffers.is_empty())
                 {
