@@ -1,4 +1,4 @@
-const engine = @import("../../engine.zig");
+const engine = @import("../../../engine.zig");
 const ResourceHandle = engine.utils.ResourceHandle;
 
 // ----------------------------------------------

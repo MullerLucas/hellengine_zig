@@ -4,7 +4,7 @@ const Allocator = std.mem.Allocator;
 
 const vk        = @import("vulkan-zig");
 const za        = @import("zalgebra");
-const engine    = @import("../../engine.zig");
+const engine    = @import("../../../engine.zig");
 const resources = @import("resources");
 
 const CFG = engine.config;

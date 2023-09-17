@@ -1,7 +1,7 @@
 const std    = @import("std");
 const vk     = @import("vulkan-zig");
-const engine = @import("../../../engine/engine.zig");
-const render = @import("../render.zig");
+const engine = @import("../../../engine.zig");
+const render = @import("../../render.zig");
 
 const ResourceHandle = engine.utils.ResourceHandle;
 const MemRange       = engine.utils.MemRange;

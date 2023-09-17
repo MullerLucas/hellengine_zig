@@ -1,6 +1,6 @@
 const std    = @import("std");
 const c      = @import("../c.zig");
-const engine = @import("../engine.zig");
+const engine = @import("../../engine.zig");
 
 const ResourceHandle = engine.utils.ResourceHandle;
 const FrameTimer     = engine.time.FrameTimer(4096);

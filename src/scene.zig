@@ -1,7 +1,7 @@
 const std = @import("std");
 const za = @import("zalgebra");
 
-const engine     = @import("engine/engine.zig");
+const engine     = @import("engine.zig");
 const Renderer      = engine.render.Renderer;
 const RenderData    = engine.render.RenderData;
 const Vertex        = engine.render.Vertex;

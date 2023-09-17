@@ -1,5 +1,5 @@
 const std    = @import("std");
-const engine = @import("../engine.zig");
+const engine = @import("../../engine.zig");
 
 const StackArray = engine.collections.StackArray;
 

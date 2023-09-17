@@ -2,7 +2,7 @@ const std    = @import("std");
 const vk     = @import("vulkan-zig");
 const engine = @import("../engine.zig");
 
-pub const obj_file = @import("obj_file.zig");
+pub const obj_file = @import("resources/obj_file.zig");
 
 const ResourceHandle  = engine.utils.ResourceHandle;
 const SString128      = engine.string.StringS128;

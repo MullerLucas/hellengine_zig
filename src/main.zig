@@ -1,12 +1,12 @@
 const std = @import("std");
 
-const engine = @import("engine/engine.zig");
+const engine = @import("engine.zig");
 const Logger = engine.logging.scoped(.app);
 const Renderer = engine.render.Renderer;
 
 const GlfwWindow = engine.render.GlfwWindow;
 const TestScene  = @import("scene.zig").TestScene;
-const resources  = @import("engine/resources/resources.zig");
+const resources  = @import("engine/resources.zig");
 
 // ----------------------------------------------
 

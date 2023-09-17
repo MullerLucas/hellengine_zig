@@ -1,5 +1,5 @@
 const std = @import("std");
-const engine = @import("../engine.zig");
+const engine = @import("../../engine.zig");
 const Geometry           = engine.resources.Geometry;
 const GeometryConfig     = engine.resources.GeometryConfig;
 const MaterialCreateInfo = engine.resources.MaterialCreateInfo;
