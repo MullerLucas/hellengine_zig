@@ -10,6 +10,13 @@ const resources  = @import("engine/resources.zig");
 
 // ----------------------------------------------
 
+test {
+    // std.testing.refAllDecls(@This());
+    std.testing.refAllDecls(engine.collections);
+}
+
+// ----------------------------------------------
+
 pub fn main() !void {
     Logger.info("starting appliation\n", .{});
 

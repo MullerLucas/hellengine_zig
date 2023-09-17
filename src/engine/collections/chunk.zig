@@ -98,9 +98,9 @@ pub fn Chunk(comptime T: type, comptime N: usize) type {
             };
         };
 
-        const Field = std.meta.FieldEnum(Elem);
+        pub const Field = std.meta.FieldEnum(Elem);
 
-        fn FieldType(comptime field: Field) type {
+        pub fn FieldType(comptime field: Field) type {
             return std.meta.fieldInfo(Elem, field).type;
         }
 
@@ -154,6 +154,10 @@ pub fn Chunk(comptime T: type, comptime N: usize) type {
                 };
             }
         };
+
+        pub fn is_full(self: *Self) bool {
+            return self.len == Self.capacity;
+        }
 
         pub fn slice(self: *Self) Slice {
             var result = Slice {
