@@ -13,8 +13,7 @@ const StackArray = engine.collections.StackArray;
 
 // ----------------------------------------------
 
-pub const ShaderAttribute = struct
-{
+pub const ShaderAttribute = struct {
     format: NumberFormat,
     binding: usize,
     layout: usize,
@@ -22,8 +21,7 @@ pub const ShaderAttribute = struct
 
 // ----------------------------------------------
 
-pub const ShaderAttributeInfo = struct
-{
+pub const ShaderAttributeInfo = struct {
     format: NumberFormat,
     binding: usize,
     location: usize,
@@ -33,8 +31,7 @@ pub const ShaderAttributeInfoArray = StackArray(ShaderAttributeInfo, engine.conf
 
 // ----------------------------------------------
 
-pub const ShaderScope = enum(usize)
-{
+pub const ShaderScope = enum(usize) {
     global   = 0,
     scene    = 1,
     material = 2,
@@ -43,8 +40,7 @@ pub const ShaderScope = enum(usize)
 
 // ----------------------------------------------
 
-pub const ShaderUniformInfo = struct
-{
+pub const ShaderUniformInfo = struct {
     name: String,
     size: usize,
 };
@@ -53,8 +49,7 @@ pub const ShaderUniformInfoArray = StackArray(ShaderUniformInfo, engine.config.m
 
 // ----------------------------------------------
 
-pub const ShaderSamplerInfo = struct
-{
+pub const ShaderSamplerInfo = struct {
     name: String,
 };
 
@@ -62,8 +57,7 @@ pub const ShaderSamplerInfoArray = StackArray(ShaderSamplerInfo, engine.config.m
 
 // ----------------------------------------------
 
-pub const ShaderScopeInfo = struct
-{
+pub const ShaderScopeInfo = struct {
     buffers:  ShaderUniformInfoArray = .{},
     samplers: ShaderSamplerInfoArray = .{},
     instance_count: usize = 1,
@@ -71,8 +65,7 @@ pub const ShaderScopeInfo = struct
 
 // ----------------------------------------------
 
-pub const ShaderInfo = struct
-{
+pub const ShaderInfo = struct {
     attributes: ShaderAttributeInfoArray  = .{},
     scopes: [4]ShaderScopeInfo = [_]ShaderScopeInfo {
         .{ .instance_count = 1 },
@@ -81,13 +74,11 @@ pub const ShaderInfo = struct
         .{ .instance_count = 1 },
     },
 
-    pub fn deinit(self: *ShaderInfo) void
-    {
+    pub fn deinit(self: *ShaderInfo) void {
         Logger.debug("deinitializing shader-info\n", .{});
 
         // TODO(lm): improve
-        for (self.scopes) |scope|
-        {
+        for (self.scopes) |scope| {
             for (scope.buffers.as_slice()) |buffer| {
                 buffer.name.deinit();
             }
@@ -97,8 +88,7 @@ pub const ShaderInfo = struct
         }
     }
 
-    pub fn add_attribute(self: *ShaderInfo, format: NumberFormat, binding: usize, location: usize) void
-    {
+    pub fn add_attribute(self: *ShaderInfo, format: NumberFormat, binding: usize, location: usize) void {
         Logger.debug("add attribute with format {}, binding {} and location {}\n", .{format, binding, location});
 
         self.attributes.push(.{
@@ -108,12 +98,10 @@ pub const ShaderInfo = struct
         });
     }
 
-    pub fn add_uniform_buffer(self: *ShaderInfo, allocator: std.mem.Allocator, scope: ShaderScope, name: []const u8, size: usize) !void
-    {
+    pub fn add_uniform_buffer(self: *ShaderInfo, allocator: std.mem.Allocator, scope: ShaderScope, name: []const u8, size: usize) !void {
         Logger.debug("add uniform-info with scope {}, name {s} and size {}\n", .{scope, name, size});
 
-        self.scopes[@intFromEnum(scope)].buffers.push(ShaderUniformInfo
-        {
+        self.scopes[@intFromEnum(scope)].buffers.push(ShaderUniformInfo {
             .name = try String.from_slice(allocator, name),
             .size = size,
         });
@@ -122,8 +110,7 @@ pub const ShaderInfo = struct
     pub fn add_uniform_sampler(self: *ShaderInfo, allocator: std.mem.Allocator, scope: ShaderScope, name: []const u8) !void {
         Logger.debug("add sampler-info with scope {}, name {s}\n", .{scope, name});
 
-        self.scopes[@intFromEnum(scope)].samplers.push(ShaderSamplerInfo
-        {
+        self.scopes[@intFromEnum(scope)].samplers.push(ShaderSamplerInfo {
             .name = try String.from_slice(allocator, name),
         });
     }
@@ -131,14 +118,12 @@ pub const ShaderInfo = struct
 
 // ----------------------------------------------
 
-pub const ShaderProgram = struct
-    {
+pub const ShaderProgram = struct {
     info: ShaderInfo,
     /// data specific to the used backend
     internals: ShaderInternals = undefined,
 
-    pub fn deinit(self: *ShaderProgram) void
-    {
+    pub fn deinit(self: *ShaderProgram) void {
         self.info.deinit();
     }
 };

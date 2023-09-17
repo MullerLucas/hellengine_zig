@@ -18,18 +18,15 @@ const backend_resources = if (true)
 
 // ----------------------------------------------
 
-pub const Vertex = struct
-{
+pub const Vertex = struct {
     position: [3]f32 = .{ 0, 0, 0 },
     normal:   [3]f32 = .{ 0, 0, 0 },
     color:    [3]f32 = .{ 1, 1, 1 },
     uv:       [2]f32 = .{ 0, 0 },
 
     // @Todo: don't use vk stuff in here
-    pub fn get_binding_description() vk.VertexInputBindingDescription
-    {
-        return vk.VertexInputBindingDescription
-        {
+    pub fn get_binding_description() vk.VertexInputBindingDescription {
+        return vk.VertexInputBindingDescription {
             .binding = 0,
             .stride = @sizeOf(Vertex),
             .input_rate = .vertex,
@@ -39,8 +36,7 @@ pub const Vertex = struct
 
 // ----------------------------------------------
 
-pub const RawImage = struct
-{
+pub const RawImage = struct {
     width:    u32 = 0,
     height:   u32 = 0,
     channels: u32 = 0,
@@ -49,8 +45,7 @@ pub const RawImage = struct
 
 // ----------------------------------------------
 
-pub const Texture = struct
-{
+pub const Texture = struct {
     pub const name_limit: usize = 128;
 
     path: [name_limit]u8 = undefined,
@@ -59,8 +54,7 @@ pub const Texture = struct
 
 // ----------------------------------------------
 
-pub const IlluminationModel = enum(u8)
-{
+pub const IlluminationModel = enum(u8) {
     ColorOnAmbientOff                                         = 0,
     ColorOnAmbientOn                                          = 1,
     HighlightOn                                               = 2,
@@ -76,8 +70,7 @@ pub const IlluminationModel = enum(u8)
 
 // ----------------------------------------------
 
-pub const MaterialInfo = struct
-{
+pub const MaterialInfo = struct {
     pub const MaterialName = SString128;
 
     name: MaterialName,
@@ -99,8 +92,7 @@ pub const MaterialInfo = struct
     illumination_model: ?IlluminationModel = null,
 };
 
-pub const MaterialCreateInfo = struct
-{
+pub const MaterialCreateInfo = struct {
     pub const List = std.ArrayList(MaterialCreateInfo);
 
     info:                   MaterialInfo,
@@ -125,8 +117,7 @@ pub const MaterialCreateInfo = struct
 
 // ----------------------------------------------
 
-pub const Material = struct
-{
+pub const Material = struct {
     info:       MaterialInfo,
     program_h:  ResourceHandle,
     textures_h: [engine.config.max_uniform_samplers_per_instance]ResourceHandle = undefined,
@@ -148,8 +139,7 @@ pub const GeometryConfig = struct {
     // extends_min:
     // extends_max
 
-    pub fn material_name_slice(self: *GeometryConfig) []const u8
-    {
+    pub fn material_name_slice(self: *GeometryConfig) []const u8 {
         return self.material_name[0..self.material_name_len];
     }
 };
@@ -157,8 +147,7 @@ pub const GeometryConfig = struct {
 // ----------------------------------------------
 
 // https://registry.khronos.org/vulkan/specs/1.3-khr-extensions/html/vkspec.html#vkCmdDrawIndexed
-pub const Geometry = struct
-{
+pub const Geometry = struct {
     pub const IndexType = u32;
 
     vertices:   []Vertex,

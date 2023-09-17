@@ -8,8 +8,7 @@ const c      = engine.c;
 
 // ----------------------------------------------------------------------------
 
-pub const Size2D = struct
-{
+pub const Size2D = struct {
     width:  u32,
     height: u32,
 };
@@ -18,15 +17,12 @@ pub const VKProc = *const fn () callconv(.C) void;
 
 // ----------------------------------------------------------------------------
 
-pub const GlfwWindow = struct
-{
+pub const GlfwWindow = struct {
     handle: ?*c.GLFWwindow = null,
     framebuffer_resized: bool = false,
 
-    pub fn init(width: u32, height: u32, app_name: [*:0]const u8) !GlfwWindow
-    {
-        if(c.glfwInit() == c.GLFW_FALSE)
-        {
+    pub fn init(width: u32, height: u32, app_name: [*:0]const u8) !GlfwWindow {
+        if(c.glfwInit() == c.GLFW_FALSE) {
             @panic("failed to initialize GLFW");
         }
 
@@ -40,23 +36,20 @@ pub const GlfwWindow = struct
         return result;
     }
 
-    pub inline fn from_c_handle(handle: *anyopaque) GlfwWindow
-    {
+    pub inline fn from_c_handle(handle: *anyopaque) GlfwWindow {
         return GlfwWindow {
             .handle = @as(*c.GLFWwindow, @ptrCast(@alignCast(handle))),
             .framebuffer_resized = false,
         };
     }
 
-    pub inline fn deinit(self: *GlfwWindow) void
-    {
+    pub inline fn deinit(self: *GlfwWindow) void {
         Logger.info("deinitialize Glfw-Window\n", .{});
         c.glfwDestroyWindow(self.handle);
         c.glfwTerminate();
     }
 
-    pub fn get_instance_proc_address(vk_instance: ?*anyopaque, proc_name: [*:0]const u8) callconv(.C) ?VKProc
-    {
+    pub fn get_instance_proc_address(vk_instance: ?*anyopaque, proc_name: [*:0]const u8) callconv(.C) ?VKProc {
         if (c.glfwGetInstanceProcAddress(
             if (vk_instance) |v| @as(c.VkInstance, @ptrCast(v)) else null,
             proc_name
@@ -67,29 +60,24 @@ pub const GlfwWindow = struct
         return null;
     }
 
-    pub inline fn should_close(self: *GlfwWindow) bool
-    {
+    pub inline fn should_close(self: *GlfwWindow) bool {
         return c.glfwWindowShouldClose(self.handle) == c.GLFW_TRUE;
     }
 
-    pub inline fn set_should_close(self: *GlfwWindow, value: bool) void
-    {
+    pub inline fn set_should_close(self: *GlfwWindow, value: bool) void {
         const c_value = if (value) c.GLFW_TRUE else c.GLFW_FALSE;
         c.glfeSetWindowShouldClose(self.handle, c_value);
     }
 
-    pub inline fn poll_events() void
-    {
+    pub inline fn poll_events() void {
         c.glfwPollEvents();
     }
 
-    pub inline fn wait_events() void
-    {
+    pub inline fn wait_events() void {
         c.glfwWaitEvents();
     }
 
-    pub inline fn get_framebuffer_size(self: *GlfwWindow) Size2D
-    {
+    pub inline fn get_framebuffer_size(self: *GlfwWindow) Size2D {
         var width: c_int = undefined;
         var height: c_int = undefined;
         c.glfwGetFramebufferSize(self.handle.?, &width, &height);
@@ -100,11 +88,9 @@ pub const GlfwWindow = struct
         };
     }
 
-    pub inline fn create_window_surface(self: *GlfwWindow, vk_instance: anytype, vk_allocation_callbacks: anytype, vk_surface_khr: anytype) i32
-    {
+    pub inline fn create_window_surface(self: *GlfwWindow, vk_instance: anytype, vk_allocation_callbacks: anytype, vk_surface_khr: anytype) i32 {
         // zig-vulkan uses enums to represent opaque pointers
-        const instance: c.VkInstance = switch(@typeInfo(@TypeOf(vk_instance)))
-        {
+        const instance: c.VkInstance = switch(@typeInfo(@TypeOf(vk_instance))) {
             .Enum => @as(c.VkInstance, @ptrFromInt(@intFromEnum(vk_instance))),
             else  => @as(c.VkInstance, @ptrCast(vk_instance)),
         };
@@ -117,27 +103,22 @@ pub const GlfwWindow = struct
         );
     }
 
-    pub inline fn get_required_instance_extensions() ?[][*:0]const u8
-    {
+    pub inline fn get_required_instance_extensions() ?[][*:0]const u8 {
         var count: u32 = 0;
-        if (c.glfwGetRequiredInstanceExtensions(&count)) |extensions|
+        if (c.glfwGetRequiredInstanceExtensions(&count)) |extensions| {
             return @as([*][*:0]const u8, @ptrCast(extensions))[0..count];
+        }
         return null;
     }
 
-    pub inline fn set_window_user_pointer(self: *GlfwWindow, pointer: ?*anyopaque) void
-    {
+    pub inline fn set_window_user_pointer(self: *GlfwWindow, pointer: ?*anyopaque) void {
         c.glfwSetWindowUserPointer(self.handle, pointer);
     }
 
-    pub inline fn set_framebuffer_size_callback(self: *GlfwWindow, comptime callback: ?fn (window: *GlfwWindow, width: u32, height: u32) void) void
-    {
-        if (callback) |user_callback|
-        {
-            const CWrapper = struct
-            {
-                pub fn framebufferSizeCallbackWrapper(handle: ?*c.GLFWwindow, width: c_int, height: c_int) callconv(.C) void
-                {
+    pub inline fn set_framebuffer_size_callback(self: *GlfwWindow, comptime callback: ?fn (window: *GlfwWindow, width: u32, height: u32) void) void {
+        if (callback) |user_callback| {
+            const CWrapper = struct {
+                pub fn framebufferSizeCallbackWrapper(handle: ?*c.GLFWwindow, width: c_int, height: c_int) callconv(.C) void {
                     var window = from_c_handle(handle.?);
                     @call(.always_inline, user_callback, .{
                         &window,
@@ -147,14 +128,13 @@ pub const GlfwWindow = struct
                 }
             };
 
-            if (c.glfwSetFramebufferSizeCallback(self.handle, CWrapper.framebufferSizeCallbackWrapper) != null) return;
+            if (c.glfwSetFramebufferSizeCallback(self.handle, CWrapper.framebufferSizeCallbackWrapper) != null) { return; }
         } else {
-            if (c.glfwSetFramebufferSizeCallback(self.handle, null) != null) return;
+            if (c.glfwSetFramebufferSizeCallback(self.handle, null) != null) { return; }
         }
     }
 
-    fn framebuffer_resize_callback(window: *GlfwWindow, _: u32, _: u32) void
-    {
+    fn framebuffer_resize_callback(window: *GlfwWindow, _: u32, _: u32) void {
         window.framebuffer_resized = true;
     }
 };

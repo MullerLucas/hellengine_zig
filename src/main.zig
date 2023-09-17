@@ -10,13 +10,11 @@ const resources  = @import("engine/resources/resources.zig");
 
 // ----------------------------------------------
 
-pub fn main() !void
-{
+pub fn main() !void {
     Logger.info("starting appliation\n", .{});
 
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer
-    {
+    defer {
         const leaked = gpa.deinit();
         if (leaked == .leak) std.log.err("MemLeak", .{});
     }
@@ -25,8 +23,7 @@ pub fn main() !void
     var window = try GlfwWindow.init(engine.config.WIDTH, engine.config.HEIGHT, engine.config.APP_NAME);
     defer window.deinit();
 
-    var renderer = Renderer.init(allocator, &window) catch |err|
-    {
+    var renderer = Renderer.init(allocator, &window) catch |err| {
         Logger.err("application failed to init with error: {any}\n", .{err});
         return;
     };
@@ -35,8 +32,7 @@ pub fn main() !void
     var scene = try TestScene.init(allocator, &renderer);
     defer scene.deinit();
 
-    while (!window.should_close())
-    {
+    while (!window.should_close()) {
         GlfwWindow.poll_events();
         try scene.render_scene();
     }
@@ -45,4 +41,3 @@ pub fn main() !void
 
     Logger.info("exiting appliation\n", .{});
 }
-

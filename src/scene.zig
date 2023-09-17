@@ -17,7 +17,6 @@ const StackArray = engine.collections.StackArray;
 // ----------------------------------------------g
 
 pub const TestScene = struct {
-
     renderer:    *Renderer,
     program_h:   ResourceHandle = ResourceHandle.invalid,
     meshes_h:    StackArray(ResourceHandle, 64) = .{},

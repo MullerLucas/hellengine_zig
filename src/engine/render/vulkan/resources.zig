@@ -3,22 +3,19 @@ const ResourceHandle = engine.utils.ResourceHandle;
 
 // ----------------------------------------------
 
-pub const TextureInternals = struct
-{
+pub const TextureInternals = struct {
     image_h: ResourceHandle = ResourceHandle.invalid,
 };
 
 // ----------------------------------------------
 
-pub const MaterialInternals = struct
-{
+pub const MaterialInternals = struct {
     instance_h: ResourceHandle = ResourceHandle.invalid,
 };
 
 // ----------------------------------------------
 
-pub const GeometryInternals = struct
-{
+pub const GeometryInternals = struct {
     vertex_buffer_h: ResourceHandle = ResourceHandle.invalid,
     index_buffer_h:  ResourceHandle = ResourceHandle.invalid,
 };

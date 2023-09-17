@@ -67,15 +67,13 @@ const PushConstantRangeStack          = StackArray(vk.PushConstantRange, CFG.vul
 
 const SCOPE_SET_INDICES = [_]usize { 0, 1, 2, 3 };
 
-pub inline fn scope_set_index(scope: ShaderScope) usize
-{
+pub inline fn scope_set_index(scope: ShaderScope) usize {
     return SCOPE_SET_INDICES[@intFromEnum(scope)];
 }
 
 // ----------------------------------------------
 
-pub const VulkanBackend = struct
-{
+pub const VulkanBackend = struct {
     // const Self = @This();
     allocator: Allocator,
 
@@ -124,10 +122,8 @@ pub const VulkanBackend = struct
     curr_image_index: u32 = 0,
 
 
-    pub fn init(allocator: Allocator, window: *GlfwWindow) !VulkanBackend
-    {
-        var self = VulkanBackend
-        {
+    pub fn init(allocator: Allocator, window: *GlfwWindow) !VulkanBackend {
+        var self = VulkanBackend {
             .allocator = allocator,
             .start_time = try std.time.Instant.now(),
             .window = window,
@@ -153,43 +149,35 @@ pub const VulkanBackend = struct
         return self;
     }
 
-    pub fn wait_device_idle(self: *VulkanBackend) !void
-    {
+    pub fn wait_device_idle(self: *VulkanBackend) !void {
         try self.vkd.deviceWaitIdle(self.device);
     }
 
-    fn cleanup_swap_chain(self: *VulkanBackend) void
-    {
+    fn cleanup_swap_chain(self: *VulkanBackend) void {
         self.free_image(self.depth_image_handle);
 
-        if (self.swap_chain_framebuffers != null)
-        {
-            for (self.swap_chain_framebuffers.?) |framebuffer|
-            {
+        if (self.swap_chain_framebuffers != null) {
+            for (self.swap_chain_framebuffers.?) |framebuffer| {
                 self.vkd.destroyFramebuffer(self.device, framebuffer, null);
             }
             self.allocator.free(self.swap_chain_framebuffers.?);
             self.swap_chain_framebuffers = null;
         }
 
-        if (self.swap_chain_image_views != null)
-        {
-            for (self.swap_chain_image_views.?) |image_view|
-            {
+        if (self.swap_chain_image_views != null) {
+            for (self.swap_chain_image_views.?) |image_view| {
                 self.vkd.destroyImageView(self.device, image_view, null);
             }
             self.allocator.free(self.swap_chain_image_views.?);
             self.swap_chain_image_views = null;
         }
 
-        if (self.swap_chain_images != null)
-        {
+        if (self.swap_chain_images != null) {
             self.allocator.free(self.swap_chain_images.?);
             self.swap_chain_images = null;
         }
 
-        if (self.swap_chain != .null_handle)
-        {
+        if (self.swap_chain != .null_handle) {
             self.vkd.destroySwapchainKHR(self.device, self.swap_chain, null);
             self.swap_chain = .null_handle;
         }
@@ -203,48 +191,56 @@ pub const VulkanBackend = struct
         self.images.deinit(self.allocator);
         self.buffers.deinit(self.allocator);
 
-        if (self.render_finished_semaphores != null)
-        {
-            for (self.render_finished_semaphores.?) |semaphore|
-            {
+        if (self.render_finished_semaphores != null) {
+            for (self.render_finished_semaphores.?) |semaphore| {
                 self.vkd.destroySemaphore(self.device, semaphore, null);
             }
             self.allocator.free(self.render_finished_semaphores.?);
         }
-        if (self.image_available_semaphores != null)
-        {
-            for (self.image_available_semaphores.?) |semaphore|
-            {
+
+        if (self.image_available_semaphores != null) {
+            for (self.image_available_semaphores.?) |semaphore| {
                 self.vkd.destroySemaphore(self.device, semaphore, null);
             }
             self.allocator.free(self.image_available_semaphores.?);
         }
-        if (self.in_flight_fences != null)
-        {
-            for (self.in_flight_fences.?) |fence|
-            {
+
+        if (self.in_flight_fences != null) {
+            for (self.in_flight_fences.?) |fence| {
                 self.vkd.destroyFence(self.device, fence, null);
             }
             self.allocator.free(self.in_flight_fences.?);
         }
 
-        if (self.command_pool != .null_handle) self.vkd.destroyCommandPool(self.device, self.command_pool, null);
-        if (self.command_buffers != null) self.allocator.free(self.command_buffers.?);
+        if (self.command_pool != .null_handle) {
+            self.vkd.destroyCommandPool(self.device, self.command_pool, null);
+        }
 
-        if (self.device != .null_handle) self.vkd.destroyDevice(self.device, null);
+        if (self.command_buffers != null) {
+            self.allocator.free(self.command_buffers.?);
+        }
 
-        if (CFG.enable_validation_layers and self.debug_messenger != .null_handle) self.vki.destroyDebugUtilsMessengerEXT(self.instance, self.debug_messenger, null);
+        if (self.device != .null_handle) {
+            self.vkd.destroyDevice(self.device, null);
+        }
 
-        if (self.surface != .null_handle) self.vki.destroySurfaceKHR(self.instance, self.surface, null);
-        if (self.instance != .null_handle) self.vki.destroyInstance(self.instance, null);
+        if (CFG.enable_validation_layers and self.debug_messenger != .null_handle) {
+            self.vki.destroyDebugUtilsMessengerEXT(self.instance, self.debug_messenger, null);
+        }
+
+        if (self.surface != .null_handle) {
+            self.vki.destroySurfaceKHR(self.instance, self.surface, null);
+        }
+
+        if (self.instance != .null_handle) {
+            self.vki.destroyInstance(self.instance, null);
+        }
     }
 
-    fn recreate_swap_chain(self: *VulkanBackend) !void
-    {
+    fn recreate_swap_chain(self: *VulkanBackend) !void {
         var size = self.window.get_framebuffer_size();
 
-        while (size.width == 0 or size.height == 0)
-        {
+        while (size.width == 0 or size.height == 0) {
             size = self.window.get_framebuffer_size();
             GlfwWindow.wait_events();
         }
@@ -259,18 +255,15 @@ pub const VulkanBackend = struct
         try self.create_framebuffers();
     }
 
-    fn create_instance(self: *VulkanBackend) !void
-    {
+    fn create_instance(self: *VulkanBackend) !void {
         const vk_proc: *const fn (instance: vk.Instance, procname: [*:0]const u8) callconv(.C) vk.PfnVoidFunction = @ptrCast(&GlfwWindow.get_instance_proc_address);
         self.vkb = try engine.render.vulkan.BaseDispatch.load(vk_proc);
 
-        if (CFG.enable_validation_layers and !try self.check_validation_layer_support())
-        {
+        if (CFG.enable_validation_layers and !try self.check_validation_layer_support()) {
             return error.MissingValidationLayer;
         }
 
-        const app_info = vk.ApplicationInfo
-        {
+        const app_info = vk.ApplicationInfo {
             .p_application_name = "hellengine",
             .application_version = vk.makeApiVersion(1, 0, 0, 0),
             .p_engine_name = "No Engine",
@@ -281,8 +274,7 @@ pub const VulkanBackend = struct
         const extensions = try get_required_extensions(self.allocator);
         defer extensions.deinit();
 
-        var create_info = vk.InstanceCreateInfo
-        {
+        var create_info = vk.InstanceCreateInfo {
             .flags = .{},
             .p_application_info = &app_info,
             .enabled_layer_count = 0,
@@ -291,8 +283,7 @@ pub const VulkanBackend = struct
             .pp_enabled_extension_names = extensions.items.ptr,
         };
 
-        if (CFG.enable_validation_layers)
-        {
+        if (CFG.enable_validation_layers) {
             create_info.enabled_layer_count = validation_layers.len;
             create_info.pp_enabled_layer_names = &validation_layers;
 
@@ -306,10 +297,8 @@ pub const VulkanBackend = struct
         self.vki = try engine.render.vulkan.InstanceDispatch.load(self.instance, vk_proc);
     }
 
-    fn populate_debug_messenger_create_info(create_info: *vk.DebugUtilsMessengerCreateInfoEXT) void
-    {
-        create_info.* =
-        .{
+    fn populate_debug_messenger_create_info(create_info: *vk.DebugUtilsMessengerCreateInfoEXT) void {
+        create_info.* = .{
             .flags = .{},
             .message_severity = .{
                 .verbose_bit_ext = true,
@@ -326,9 +315,8 @@ pub const VulkanBackend = struct
         };
     }
 
-    fn setup_debug_messenger(self: *VulkanBackend) !void
-    {
-        if (!CFG.enable_validation_layers) return;
+    fn setup_debug_messenger(self: *VulkanBackend) !void {
+        if (!CFG.enable_validation_layers) { return; }
 
         var create_info: vk.DebugUtilsMessengerCreateInfoEXT = undefined;
         populate_debug_messenger_create_info(&create_info);
@@ -336,16 +324,13 @@ pub const VulkanBackend = struct
         self.debug_messenger = try self.vki.createDebugUtilsMessengerEXT(self.instance, &create_info, null);
     }
 
-    fn create_surface(self: *VulkanBackend) !void
-    {
-        if ((self.window.create_window_surface(self.instance, null, &self.surface)) != @intFromEnum(vk.Result.success))
-        {
+    fn create_surface(self: *VulkanBackend) !void {
+        if ((self.window.create_window_surface(self.instance, null, &self.surface)) != @intFromEnum(vk.Result.success)) {
             return error.SurfaceInitFailed;
         }
     }
 
-    fn pick_physical_device(self: *VulkanBackend) !void
-    {
+    fn pick_physical_device(self: *VulkanBackend) !void {
         var device_count: u32 = undefined;
         _ = try self.vki.enumeratePhysicalDevices(self.instance, &device_count, null);
 
@@ -357,28 +342,23 @@ pub const VulkanBackend = struct
         defer self.allocator.free(devices);
         _ = try self.vki.enumeratePhysicalDevices(self.instance, &device_count, devices.ptr);
 
-        for (devices) |device|
-        {
-            if (try self.is_device_suitable(device))
-            {
+        for (devices) |device| {
+            if (try self.is_device_suitable(device)) {
                 self.physical_device = device;
                 break;
             }
         }
 
-        if (self.physical_device == .null_handle)
-        {
+        if (self.physical_device == .null_handle) {
             return error.NoSuitableDevice;
         }
     }
 
-    fn create_logical_device(self: *VulkanBackend) !void
-    {
+    fn create_logical_device(self: *VulkanBackend) !void {
         const indices = try self.find_queue_families(self.physical_device);
         const queue_priority = [_]f32{1};
 
-        var queue_create_info = [_]vk.DeviceQueueCreateInfo
-        {
+        var queue_create_info = [_]vk.DeviceQueueCreateInfo {
             .{
                 .flags = .{},
                 .queue_family_index = indices.graphics_family.?,
@@ -393,13 +373,11 @@ pub const VulkanBackend = struct
             },
         };
 
-        const device_features = vk.PhysicalDeviceFeatures
-        {
+        const device_features = vk.PhysicalDeviceFeatures {
             .sampler_anisotropy = vk.TRUE,
         };
 
-        var create_info = vk.DeviceCreateInfo
-        {
+        var create_info = vk.DeviceCreateInfo {
             .flags = .{},
             .queue_create_info_count = queue_create_info.len,
             .p_queue_create_infos = &queue_create_info,
@@ -410,8 +388,7 @@ pub const VulkanBackend = struct
             .p_enabled_features = &device_features,
         };
 
-        if (CFG.enable_validation_layers)
-        {
+        if (CFG.enable_validation_layers) {
             create_info.enabled_layer_count = validation_layers.len;
             create_info.pp_enabled_layer_names = &validation_layers;
         }
@@ -424,8 +401,7 @@ pub const VulkanBackend = struct
         self.present_queue = self.vkd.getDeviceQueue(self.device, indices.present_family.?, 0);
     }
 
-    fn create_swap_chain(self: *VulkanBackend) !void
-    {
+    fn create_swap_chain(self: *VulkanBackend) !void {
         const swap_chain_support = try self.query_swap_chain_support(self.physical_device);
         defer swap_chain_support.deinit();
 
@@ -436,8 +412,7 @@ pub const VulkanBackend = struct
         Logger.debug("using present-mode {}\n", .{present_mode});
 
         var image_count = swap_chain_support.capabilities.min_image_count + 1;
-        if (swap_chain_support.capabilities.max_image_count > 0)
-        {
+        if (swap_chain_support.capabilities.max_image_count > 0) {
             image_count = @min(image_count, swap_chain_support.capabilities.max_image_count);
         }
 
@@ -448,25 +423,28 @@ pub const VulkanBackend = struct
         else
             .exclusive;
 
-        self.swap_chain = try self.vkd.createSwapchainKHR(self.device, &.
-        {
-            .flags = .{},
-            .surface = self.surface,
-            .min_image_count = image_count,
-            .image_format = surface_format.format,
-            .image_color_space = surface_format.color_space,
-            .image_extent = extent,
-            .image_array_layers = 1,
-            .image_usage = .{ .color_attachment_bit = true },
-            .image_sharing_mode = sharing_mode,
-            .queue_family_index_count = queue_family_indices.len,
-            .p_queue_family_indices = &queue_family_indices,
-            .pre_transform = swap_chain_support.capabilities.current_transform,
-            .composite_alpha = .{ .opaque_bit_khr = true },
-            .present_mode = present_mode,
-            .clipped = vk.TRUE,
-            .old_swapchain = .null_handle,
-        }, null);
+        self.swap_chain = try self.vkd.createSwapchainKHR(
+            self.device,
+            &.{
+                .flags = .{},
+                .surface = self.surface,
+                .min_image_count = image_count,
+                .image_format = surface_format.format,
+                .image_color_space = surface_format.color_space,
+                .image_extent = extent,
+                .image_array_layers = 1,
+                .image_usage = .{ .color_attachment_bit = true },
+                .image_sharing_mode = sharing_mode,
+                .queue_family_index_count = queue_family_indices.len,
+                .p_queue_family_indices = &queue_family_indices,
+                .pre_transform = swap_chain_support.capabilities.current_transform,
+                .composite_alpha = .{ .opaque_bit_khr = true },
+                .present_mode = present_mode,
+                .clipped = vk.TRUE,
+                .old_swapchain = .null_handle,
+            },
+            null
+        );
 
         _ = try self.vkd.getSwapchainImagesKHR(self.device, self.swap_chain, &image_count, null);
         self.swap_chain_images = try self.allocator.alloc(vk.Image, image_count);
@@ -476,20 +454,16 @@ pub const VulkanBackend = struct
         self.swap_chain_extent = extent;
     }
 
-    fn create_image_views(self: *VulkanBackend) !void
-    {
+    fn create_image_views(self: *VulkanBackend) !void {
         self.swap_chain_image_views = try self.allocator.alloc(vk.ImageView, self.swap_chain_images.?.len);
 
-        for (self.swap_chain_images.?, 0..) |image, i|
-        {
+        for (self.swap_chain_images.?, 0..) |image, i| {
             self.swap_chain_image_views.?[i] = try self.create_image_view(image, self.swap_chain_image_format, .{ .color_bit = true });
         }
     }
 
-    fn create_render_pass(self: *VulkanBackend) !vk.RenderPass
-    {
-        const attachments = [_]vk.AttachmentDescription
-        {
+    fn create_render_pass(self: *VulkanBackend) !vk.RenderPass {
+        const attachments = [_]vk.AttachmentDescription {
             .{
                 .flags = .{},
                 .format = self.swap_chain_image_format,
@@ -514,22 +488,19 @@ pub const VulkanBackend = struct
             },
         };
 
-        const color_attachment_ref = [_]vk.AttachmentReference
-        {
+        const color_attachment_ref = [_]vk.AttachmentReference {
             .{
                 .attachment = 0,
                 .layout = .color_attachment_optimal,
             }
         };
 
-        const depth_attachment_ref = vk.AttachmentReference
-        {
+        const depth_attachment_ref = vk.AttachmentReference {
             .attachment = 1,
             .layout = .depth_stencil_attachment_optimal,
         };
 
-        const subpass = [_]vk.SubpassDescription
-        {
+        const subpass = [_]vk.SubpassDescription {
             .{
                 .flags = .{},
                 .pipeline_bind_point = .graphics,
@@ -544,8 +515,7 @@ pub const VulkanBackend = struct
             }
         };
 
-        const dependencies = [_]vk.SubpassDependency
-        {
+        const dependencies = [_]vk.SubpassDependency {
             .{
                 .src_subpass = vk.SUBPASS_EXTERNAL,
                 .dst_subpass = 0,
@@ -557,23 +527,25 @@ pub const VulkanBackend = struct
             }
         };
 
-        return try self.vkd.createRenderPass(self.device, &.{
-            .flags = .{},
-            .attachment_count = attachments.len,
-            .p_attachments = &attachments,
-            .subpass_count = subpass.len,
-            .p_subpasses = &subpass,
-            .dependency_count = dependencies.len,
-            .p_dependencies = &dependencies,
-        }, null);
+        return try self.vkd.createRenderPass(
+            self.device,
+            &.{
+                .flags = .{},
+                .attachment_count = attachments.len,
+                .p_attachments = &attachments,
+                .subpass_count = subpass.len,
+                .p_subpasses = &subpass,
+                .dependency_count = dependencies.len,
+                .p_dependencies = &dependencies,
+            },
+            null
+        );
     }
 
-    fn create_framebuffers(self: *VulkanBackend) !void
-    {
+    fn create_framebuffers(self: *VulkanBackend) !void {
         self.swap_chain_framebuffers = try self.allocator.alloc(vk.Framebuffer, self.swap_chain_image_views.?.len);
 
-        for (self.swap_chain_framebuffers.?, 0..) |*framebuffer, i|
-        {
+        for (self.swap_chain_framebuffers.?, 0..) |*framebuffer, i| {
             const depth_image = self.get_image(self.depth_image_handle);
             const attachments = [_]vk.ImageView{ self.swap_chain_image_views.?[i], depth_image.view };
 
@@ -593,8 +565,7 @@ pub const VulkanBackend = struct
         }
     }
 
-    fn createCommandPool(self: *VulkanBackend) !void
-    {
+    fn createCommandPool(self: *VulkanBackend) !void {
         const queue_family_indices = try self.find_queue_families(self.physical_device);
 
         self.command_pool = try self.vkd.createCommandPool(
@@ -607,8 +578,7 @@ pub const VulkanBackend = struct
         );
     }
 
-    fn create_depth_resources(self: *VulkanBackend) !void
-    {
+    fn create_depth_resources(self: *VulkanBackend) !void {
         const depth_format = try self.findDepthFormat();
 
         self.depth_image_handle = try self.create_image(self.swap_chain_extent.width, self.swap_chain_extent.height, depth_format, .optimal, .{ .depth_stencil_attachment_bit = true }, .{ .device_local_bit = true });
@@ -618,18 +588,13 @@ pub const VulkanBackend = struct
         self.set_image(self.depth_image_handle, depth_image);
     }
 
-    fn find_supported_format(self: *VulkanBackend, candidates: []const vk.Format, tiling: vk.ImageTiling, features: vk.FormatFeatureFlags) !vk.Format
-    {
-        for (candidates) |format|
-        {
+    fn find_supported_format(self: *VulkanBackend, candidates: []const vk.Format, tiling: vk.ImageTiling, features: vk.FormatFeatureFlags) !vk.Format {
+        for (candidates) |format| {
             var props = self.vki.getPhysicalDeviceFormatProperties(self.physical_device, format);
 
-            if (tiling == .linear and props.linear_tiling_features.contains(features))
-            {
+            if (tiling == .linear and props.linear_tiling_features.contains(features)) {
                 return format;
-            }
-            else if (tiling == .optimal and props.optimal_tiling_features.contains(features))
-            {
+            } else if (tiling == .optimal and props.optimal_tiling_features.contains(features)) {
                 return format;
             }
         }
@@ -637,19 +602,16 @@ pub const VulkanBackend = struct
         return error.NoSupportedFormat;
     }
 
-    fn findDepthFormat(self: *VulkanBackend) !vk.Format
-    {
+    fn findDepthFormat(self: *VulkanBackend) !vk.Format {
         const preferred = [_]vk.Format{ .d32_sfloat, .d32_sfloat_s8_uint, .d24_unorm_s8_uint };
         return try self.find_supported_format(preferred[0..], .optimal, .{ .depth_stencil_attachment_bit = true });
     }
 
-    fn hasStencilComponent(format: vk.Format) bool
-    {
+    fn hasStencilComponent(format: vk.Format) bool {
         return format == .d32_sfloat_s8_uint or format == .d24_unorm_s8_uint;
     }
 
-    pub fn create_texture_internals(self: *VulkanBackend, texture: *Texture, raw_image: *const RawImage) !void
-    {
+    pub fn create_texture_internals(self: *VulkanBackend, texture: *Texture, raw_image: *const RawImage) !void {
         const width:  u64 = @intCast(raw_image.width);
         const height: u64 = @intCast(raw_image.height);
         const image_size: vk.DeviceSize = width * height * 4;
@@ -669,7 +631,8 @@ pub const VulkanBackend = struct
             .r8g8b8a8_srgb,
             .optimal,
             .{ .transfer_dst_bit = true, .sampled_bit = true },
-            .{ .device_local_bit = true });
+            .{ .device_local_bit = true }
+        );
         var texture_image = self.get_image(texture_image_h);
 
         try self.transition_image_layout(texture_image.img, .r8g8b8a8_srgb, .@"undefined", .transfer_dst_optimal);
@@ -681,25 +644,21 @@ pub const VulkanBackend = struct
         // @Todo: this is awful
         self.set_image(texture_image_h, texture_image);
 
-        texture.internals = TextureInternals
-        {
+        texture.internals = TextureInternals {
             .image_h = texture_image_h
         };
     }
 
-    pub fn destroy_texture_internals(self: *VulkanBackend, texture: *Texture) void
-    {
+    pub fn destroy_texture_internals(self: *VulkanBackend, texture: *Texture) void {
         Logger.debug("destroy texture image internals\n", .{});
         self.free_image(texture.internals.image_h);
         texture.internals = undefined;
     }
 
-    fn create_texture_sampler(self: *VulkanBackend) !vk.Sampler
-    {
+    fn create_texture_sampler(self: *VulkanBackend) !vk.Sampler {
         const properties = self.vki.getPhysicalDeviceProperties(self.physical_device);
 
-        const sampler_info = vk.SamplerCreateInfo
-        {
+        const sampler_info = vk.SamplerCreateInfo {
             .flags = .{},
             .mip_lod_bias = 0,
             .min_lod = 0,
@@ -721,10 +680,8 @@ pub const VulkanBackend = struct
         return try self.vkd.createSampler(self.device, &sampler_info, null);
     }
 
-    fn create_image_view(self: *VulkanBackend, image: vk.Image, format: vk.Format, aspect_flags: vk.ImageAspectFlags) !vk.ImageView
-    {
-        const view_info = vk.ImageViewCreateInfo
-        {
+    fn create_image_view(self: *VulkanBackend, image: vk.Image, format: vk.Format, aspect_flags: vk.ImageAspectFlags) !vk.ImageView {
+        const view_info = vk.ImageViewCreateInfo {
             .flags = .{},
             .image = image,
             .view_type = .@"2d",
@@ -741,12 +698,10 @@ pub const VulkanBackend = struct
         return try self.vkd.createImageView(self.device, &view_info, null);
     }
 
-    fn create_image(self: *VulkanBackend, image_width: u32, image_height: u32, format: vk.Format, tiling: vk.ImageTiling, usage: vk.ImageUsageFlags, properties: vk.MemoryPropertyFlags) !ResourceHandle
-    {
+    fn create_image(self: *VulkanBackend, image_width: u32, image_height: u32, format: vk.Format, tiling: vk.ImageTiling, usage: vk.ImageUsageFlags, properties: vk.MemoryPropertyFlags) !ResourceHandle {
         Logger.debug("create image {}\n", .{ self.images.len });
 
-        const image_info = vk.ImageCreateInfo
-        {
+        const image_info = vk.ImageCreateInfo {
             .flags = .{},
             .queue_family_index_count = 0,
             .p_queue_family_indices = undefined,
@@ -786,19 +741,16 @@ pub const VulkanBackend = struct
         return ResourceHandle { .value = self.images.len - 1 };
     }
 
-    fn get_image(self: *VulkanBackend, handle: ResourceHandle) Image
-    {
+    fn get_image(self: *VulkanBackend, handle: ResourceHandle) Image {
         return self.images.get(handle.value);
     }
 
     // TODO (lm): remvoe
-    fn set_image(self: *VulkanBackend, handle: ResourceHandle, image: Image) void
-    {
+    fn set_image(self: *VulkanBackend, handle: ResourceHandle, image: Image) void {
         return self.images.set(handle.value, image);
     }
 
-    pub fn free_image(self: *VulkanBackend, handle: ResourceHandle) void
-    {
+    pub fn free_image(self: *VulkanBackend, handle: ResourceHandle) void {
         Logger.debug("free image {}\n", .{ handle.value });
 
         const image = self.get_image(handle);
@@ -810,8 +762,7 @@ pub const VulkanBackend = struct
         }
     }
 
-    fn transition_image_layout(self: *VulkanBackend, image: vk.Image, _: vk.Format, old_layout: vk.ImageLayout, new_layout: vk.ImageLayout) !void
-    {
+    fn transition_image_layout(self: *VulkanBackend, image: vk.Image, _: vk.Format, old_layout: vk.ImageLayout, new_layout: vk.ImageLayout) !void {
         const command_buffer = try self.begin_single_time_commands();
 
         var barrier = [_]vk.ImageMemoryBarrier
@@ -837,24 +788,19 @@ pub const VulkanBackend = struct
         var source_stage: vk.PipelineStageFlags = undefined;
         var destination_stage: vk.PipelineStageFlags = undefined;
 
-        if (old_layout == .@"undefined" and new_layout == .transfer_dst_optimal)
-        {
+        if (old_layout == .@"undefined" and new_layout == .transfer_dst_optimal) {
             barrier[0].src_access_mask = .{};
             barrier[0].dst_access_mask = .{ .transfer_write_bit = true };
 
             source_stage = .{ .top_of_pipe_bit = true };
             destination_stage = .{ .transfer_bit = true };
-        }
-        else if (old_layout == .transfer_dst_optimal and new_layout == .shader_read_only_optimal)
-        {
+        } else if (old_layout == .transfer_dst_optimal and new_layout == .shader_read_only_optimal) {
             barrier[0].src_access_mask = .{ .transfer_write_bit = true };
             barrier[0].dst_access_mask = .{ .shader_read_bit = true };
 
             source_stage = .{ .transfer_bit = true };
             destination_stage = .{ .fragment_shader_bit = true };
-        }
-        else
-        {
+        } else {
             return error.UnsupportedLayoutTransition;
         }
 
@@ -863,12 +809,10 @@ pub const VulkanBackend = struct
         try self.end_single_time_commands(command_buffer);
     }
 
-    fn copy_buffer_to_image(self: *VulkanBackend, buffer: vk.Buffer, image: vk.Image, image_width: u32, image_height: u32) !void
-    {
+    fn copy_buffer_to_image(self: *VulkanBackend, buffer: vk.Buffer, image: vk.Image, image_width: u32, image_height: u32) !void {
         const command_buffer = try self.begin_single_time_commands();
 
-        const region = [_]vk.BufferImageCopy
-        {
+        const region = [_]vk.BufferImageCopy {
             .{
                 .buffer_offset = 0,
                 .buffer_row_length = 0,
@@ -889,8 +833,7 @@ pub const VulkanBackend = struct
         try self.end_single_time_commands(command_buffer);
     }
 
-    pub fn create_vertex_buffer(self: *VulkanBackend, vertices: []const Vertex) !ResourceHandle
-    {
+    pub fn create_vertex_buffer(self: *VulkanBackend, vertices: []const Vertex) !ResourceHandle {
         const buffer_size: vk.DeviceSize = @sizeOf(Vertex) * vertices.len;
         Logger.debug("creating vertex-buffer of size: {}\n", .{buffer_size});
 
@@ -912,8 +855,7 @@ pub const VulkanBackend = struct
         return vertex_buffer_handle;
     }
 
-    pub fn create_index_buffer(self: *VulkanBackend, indices: []const Geometry.IndexType) !ResourceHandle
-    {
+    pub fn create_index_buffer(self: *VulkanBackend, indices: []const Geometry.IndexType) !ResourceHandle {
         const buffer_size: vk.DeviceSize = @sizeOf(Geometry.IndexType) * indices.len;
         Logger.debug("creating index-buffer of size: {}\n", .{buffer_size});
 
@@ -934,20 +876,16 @@ pub const VulkanBackend = struct
         return index_buffer_handle;
     }
 
-    inline fn create_uniform_buffer(self: *VulkanBackend, buffer_size: vk.DeviceSize) !ResourceHandle
-    {
+    inline fn create_uniform_buffer(self: *VulkanBackend, buffer_size: vk.DeviceSize) !ResourceHandle {
         return try self.create_buffer(buffer_size, .{ .uniform_buffer_bit = true }, .{ .host_visible_bit = true, .host_coherent_bit = true });
     }
 
-    inline fn create_storage_buffer(self: *VulkanBackend, buffer_size: vk.DeviceSize) !ResourceHandle
-    {
+    inline fn create_storage_buffer(self: *VulkanBackend, buffer_size: vk.DeviceSize) !ResourceHandle {
         return try self.create_buffer(buffer_size, .{ .storage_buffer_bit = true }, .{ .host_visible_bit = true, .host_coherent_bit = true });
     }
 
-    fn create_descriptor_pool(self: *VulkanBackend) !vk.DescriptorPool
-    {
-        const pool_sizes = [_]vk.DescriptorPoolSize
-        {
+    fn create_descriptor_pool(self: *VulkanBackend) !vk.DescriptorPool {
+        const pool_sizes = [_]vk.DescriptorPoolSize {
             .{
                 .type = .uniform_buffer,
                 .descriptor_count = CFG.shader_uniform_buffer_descriptor_limit,
@@ -962,8 +900,7 @@ pub const VulkanBackend = struct
             },
         };
 
-        const pool_info = vk.DescriptorPoolCreateInfo
-        {
+        const pool_info = vk.DescriptorPoolCreateInfo {
             .flags = .{},
             .pool_size_count = pool_sizes.len,
             .p_pool_sizes = &pool_sizes,
@@ -973,8 +910,7 @@ pub const VulkanBackend = struct
         return try self.vkd.createDescriptorPool(self.device, &pool_info, null);
     }
 
-    fn create_buffer(self: *VulkanBackend, size: vk.DeviceSize, usage: vk.BufferUsageFlags, properties: vk.MemoryPropertyFlags) !ResourceHandle
-    {
+    fn create_buffer(self: *VulkanBackend, size: vk.DeviceSize, usage: vk.BufferUsageFlags, properties: vk.MemoryPropertyFlags) !ResourceHandle {
         Logger.debug("create buffer {}\n", .{ self.buffers.len });
 
         const buffer = try self.vkd.createBuffer(
@@ -1011,8 +947,7 @@ pub const VulkanBackend = struct
     }
 
     // TODO(lm): use reference to buffer
-    pub fn free_buffer(self: *VulkanBackend, buffer: Buffer) void
-    {
+    pub fn free_buffer(self: *VulkanBackend, buffer: Buffer) void {
         Logger.debug("free buffer\n", .{});
 
         self.vkd.destroyBuffer(self.device, buffer.buf, null);
@@ -1022,18 +957,15 @@ pub const VulkanBackend = struct
     }
 
     // TODO(lm): remove
-    pub fn free_buffer_h(self: *VulkanBackend, handle: ResourceHandle) void
-    {
+    pub fn free_buffer_h(self: *VulkanBackend, handle: ResourceHandle) void {
         self.free_buffer(self.get_buffer(handle));
     }
 
-    fn get_buffer(self: *VulkanBackend, handle: ResourceHandle) Buffer
-    {
+    fn get_buffer(self: *VulkanBackend, handle: ResourceHandle) Buffer {
         return self.buffers.get(handle.value);
     }
 
-    fn begin_single_time_commands(self: *VulkanBackend) !vk.CommandBuffer
-    {
+    fn begin_single_time_commands(self: *VulkanBackend) !vk.CommandBuffer {
         const alloc_info = vk.CommandBufferAllocateInfo{
             .level = .primary,
             .command_pool = self.command_pool,
@@ -1053,8 +985,7 @@ pub const VulkanBackend = struct
         return command_buffer;
     }
 
-    fn end_single_time_commands(self: *VulkanBackend, command_buffer: vk.CommandBuffer) !void
-    {
+    fn end_single_time_commands(self: *VulkanBackend, command_buffer: vk.CommandBuffer) !void {
         try self.vkd.endCommandBuffer(command_buffer);
 
         const submit_infos = [_]vk.SubmitInfo{.{
@@ -1072,12 +1003,10 @@ pub const VulkanBackend = struct
         self.vkd.freeCommandBuffers(self.device, self.command_pool, 1, @ptrCast(&command_buffer));
     }
 
-    fn copy_buffer(self: *VulkanBackend, src_buffer: vk.Buffer, dst_buffer: vk.Buffer, size: vk.DeviceSize) !void
-    {
+    fn copy_buffer(self: *VulkanBackend, src_buffer: vk.Buffer, dst_buffer: vk.Buffer, size: vk.DeviceSize) !void {
         var command_buffer = try self.begin_single_time_commands();
 
-        const copy_region = [_]vk.BufferCopy
-        {
+        const copy_region = [_]vk.BufferCopy {
             .{
                 .src_offset = 0,
                 .dst_offset = 0,
@@ -1089,11 +1018,9 @@ pub const VulkanBackend = struct
         try self.end_single_time_commands(command_buffer);
     }
 
-    fn find_memory_type(self: *VulkanBackend, type_filter: u32, properties: vk.MemoryPropertyFlags) !u32
-    {
+    fn find_memory_type(self: *VulkanBackend, type_filter: u32, properties: vk.MemoryPropertyFlags) !u32 {
         const mem_properties = self.vki.getPhysicalDeviceMemoryProperties(self.physical_device);
-        for (mem_properties.memory_types[0..mem_properties.memory_type_count], 0..) |mem_type, i|
-        {
+        for (mem_properties.memory_types[0..mem_properties.memory_type_count], 0..) |mem_type, i| {
             // tru u5
             if (type_filter & (@as(u32, 1) << @truncate(i)) != 0 and mem_type.property_flags.contains(properties))
                 return @truncate(i);
@@ -1102,8 +1029,7 @@ pub const VulkanBackend = struct
         return error.NoSuitableMemoryType;
     }
 
-    fn create_command_buffers(self: *VulkanBackend) !void
-    {
+    fn create_command_buffers(self: *VulkanBackend) !void {
         self.command_buffers = try self.allocator.alloc(vk.CommandBuffer, CFG.MAX_FRAMES_IN_FLIGHT);
 
         try self.vkd.allocateCommandBuffers(
@@ -1117,38 +1043,32 @@ pub const VulkanBackend = struct
         );
     }
 
-    fn create_sync_objects(self: *VulkanBackend) !void
-    {
+    fn create_sync_objects(self: *VulkanBackend) !void {
         self.image_available_semaphores = try self.allocator.alloc(vk.Semaphore, CFG.MAX_FRAMES_IN_FLIGHT);
         self.render_finished_semaphores = try self.allocator.alloc(vk.Semaphore, CFG.MAX_FRAMES_IN_FLIGHT);
         self.in_flight_fences = try self.allocator.alloc(vk.Fence, CFG.MAX_FRAMES_IN_FLIGHT);
 
         var i: usize = 0;
-        while (i < CFG.MAX_FRAMES_IN_FLIGHT) : (i += 1)
-        {
+        while (i < CFG.MAX_FRAMES_IN_FLIGHT) : (i += 1) {
             self.image_available_semaphores.?[i] = try self.vkd.createSemaphore(self.device, &.{ .flags = .{} }, null);
             self.render_finished_semaphores.?[i] = try self.vkd.createSemaphore(self.device, &.{ .flags = .{} }, null);
             self.in_flight_fences.?[i] = try self.vkd.createFence(self.device, &.{ .flags = .{ .signaled_bit = true } }, null);
         }
     }
 
-    pub fn start_render_pass(self: *VulkanBackend, info: *const ShaderInfo, internals: *ShaderInternals) !void
-    {
+    pub fn start_render_pass(self: *VulkanBackend, info: *const ShaderInfo, internals: *ShaderInternals) !void {
         _ = try self.vkd.waitForFences(self.device, 1, @ptrCast(&self.in_flight_fences.?[self.frame_in_flight_idx]), vk.TRUE, std.math.maxInt(u64));
 
         const result = self.vkd.acquireNextImageKHR(self.device, self.swap_chain, std.math.maxInt(u64), self.image_available_semaphores.?[self.frame_in_flight_idx], .null_handle)
-            catch |err| switch (err)
-            {
-                error.OutOfDateKHR =>
-                {
+            catch |err| switch (err) {
+                error.OutOfDateKHR => {
                     try self.recreate_swap_chain();
                     return;
                 },
                 else => |e| return e,
             };
 
-        if (result.result != .success and result.result != .suboptimal_khr)
-        {
+        if (result.result != .success and result.result != .suboptimal_khr) {
             return error.ImageAcquireFailed;
         }
 
@@ -1166,14 +1086,12 @@ pub const VulkanBackend = struct
 
             try self.update_shader_uniform_buffer(info, internals);
 
-            const clear_values = [_]vk.ClearValue
-            {
+            const clear_values = [_]vk.ClearValue {
                 .{ .color = .{ .float_32 = .{ 0, 0, 0, 1 } } },
                 .{ .depth_stencil = .{ .depth = 1.0, .stencil = 0 } },
             };
 
-            const render_pass_info = vk.RenderPassBeginInfo
-            {
+            const render_pass_info = vk.RenderPassBeginInfo {
                 .render_pass = internals.pipeline.render_pass,
                 .framebuffer = self.swap_chain_framebuffers.?[self.curr_image_index],
                 .render_area = vk.Rect2D{
@@ -1190,8 +1108,7 @@ pub const VulkanBackend = struct
         {
             self.vkd.cmdBindPipeline(command_buffer, .graphics, internals.pipeline.pipeline);
 
-            const viewports = [_]vk.Viewport
-            {
+            const viewports = [_]vk.Viewport {
                 .{
                     .x = 0,
                     .y = 0,
@@ -1203,8 +1120,7 @@ pub const VulkanBackend = struct
             };
             self.vkd.cmdSetViewport(command_buffer, 0, viewports.len, &viewports);
 
-            const scissors = [_]vk.Rect2D
-            {
+            const scissors = [_]vk.Rect2D {
                 .{
                     .offset = .{ .x = 0, .y = 0 },
                     .extent = self.swap_chain_extent,
@@ -1219,8 +1135,7 @@ pub const VulkanBackend = struct
         }
     }
 
-    pub fn upload_shader_data(self: *VulkanBackend, internals: *ShaderInternals, geometry: *const Geometry, obj_idx: usize) !void
-    {
+    pub fn upload_shader_data(self: *VulkanBackend, internals: *ShaderInternals, geometry: *const Geometry, obj_idx: usize) !void {
         const command_buffer = self.command_buffers.?[self.frame_in_flight_idx];
 
         const offsets = [_]vk.DeviceSize{0};
@@ -1236,8 +1151,7 @@ pub const VulkanBackend = struct
     }
 
     /// draw a single geometry
-    pub fn draw_geometry(self: *VulkanBackend, geometry: *const Geometry) !void
-    {
+    pub fn draw_geometry(self: *VulkanBackend, geometry: *const Geometry) !void {
         const command_buffer = self.command_buffers.?[self.frame_in_flight_idx];
 
         const instance_count = 1;
@@ -1253,8 +1167,7 @@ pub const VulkanBackend = struct
         );
     }
 
-    pub fn submit_render_pass(self: *VulkanBackend) !void
-    {
+    pub fn submit_render_pass(self: *VulkanBackend) !void {
         {
             const command_buffer = self.command_buffers.?[self.frame_in_flight_idx];
 
@@ -1267,8 +1180,7 @@ pub const VulkanBackend = struct
             const wait_stages = [_]vk.PipelineStageFlags{.{ .color_attachment_output_bit = true }};
             const signal_semaphores = [_]vk.Semaphore{self.render_finished_semaphores.?[self.frame_in_flight_idx]};
 
-            const submit_info = vk.SubmitInfo
-            {
+            const submit_info = vk.SubmitInfo {
                 .wait_semaphore_count = wait_semaphores.len,
                 .p_wait_semaphores = &wait_semaphores,
                 .p_wait_dst_stage_mask = &wait_stages,
@@ -1292,13 +1204,10 @@ pub const VulkanBackend = struct
                 else => return err,
             };
 
-            if (present_result == .error_out_of_date_khr or present_result == .suboptimal_khr or self.window.framebuffer_resized)
-            {
+            if (present_result == .error_out_of_date_khr or present_result == .suboptimal_khr or self.window.framebuffer_resized) {
                 self.window.framebuffer_resized = false;
                 try self.recreate_swap_chain();
-            }
-            else if (present_result != .success)
-            {
+            } else if (present_result != .success) {
                 return error.ImagePresentFailed;
             }
 
@@ -1306,8 +1215,7 @@ pub const VulkanBackend = struct
         }
     }
 
-    fn create_shader_module(self: *VulkanBackend, code: []const u8) !vk.ShaderModule
-    {
+    fn create_shader_module(self: *VulkanBackend, code: []const u8) !vk.ShaderModule {
         return try self.vkd.createShaderModule(
             self.device,
             &.{
@@ -1320,19 +1228,17 @@ pub const VulkanBackend = struct
         );
     }
 
-    fn choose_swap_surface_format(available_formats: []vk.SurfaceFormatKHR) vk.SurfaceFormatKHR
-    {
-        for (available_formats) |available_format|
-        {
-            if (available_format.format == .b8g8r8a8_srgb and available_format.color_space == .srgb_nonlinear_khr)
+    fn choose_swap_surface_format(available_formats: []vk.SurfaceFormatKHR) vk.SurfaceFormatKHR {
+        for (available_formats) |available_format| {
+            if (available_format.format == .b8g8r8a8_srgb and available_format.color_space == .srgb_nonlinear_khr) {
                 return available_format;
+            }
         }
 
         return available_formats[0];
     }
 
-    fn choose_swap_present_mode(available_present_modes: []vk.PresentModeKHR) vk.PresentModeKHR
-    {
+    fn choose_swap_present_mode(available_present_modes: []vk.PresentModeKHR) vk.PresentModeKHR {
         _ = available_present_modes;
         // HACK(lm): force present-mode for testing
         return .immediate_khr;
@@ -1345,26 +1251,21 @@ pub const VulkanBackend = struct
         // return .fifo_khr;
     }
 
-    fn choose_swap_extent(self: *VulkanBackend, capabilities: vk.SurfaceCapabilitiesKHR) !vk.Extent2D
-    {
-        if (capabilities.current_extent.width != 0xFFFF_FFFF)
-        {
+    fn choose_swap_extent(self: *VulkanBackend, capabilities: vk.SurfaceCapabilitiesKHR) !vk.Extent2D {
+        if (capabilities.current_extent.width != 0xFFFF_FFFF) {
             return capabilities.current_extent;
         }
-        else
-        {
+        else {
             const window_size = self.window.get_framebuffer_size();
 
-            return vk.Extent2D
-            {
+            return vk.Extent2D {
                 .width  = std.math.clamp(window_size.width, capabilities.min_image_extent.width, capabilities.max_image_extent.width),
                 .height = std.math.clamp(window_size.height, capabilities.min_image_extent.height, capabilities.max_image_extent.height),
             };
         }
     }
 
-    fn query_swap_chain_support(self: *VulkanBackend, device: vk.PhysicalDevice) !SwapChainSupportDetails
-    {
+    fn query_swap_chain_support(self: *VulkanBackend, device: vk.PhysicalDevice) !SwapChainSupportDetails {
         var details = SwapChainSupportDetails.init(self.allocator);
 
         details.capabilities = try self.vki.getPhysicalDeviceSurfaceCapabilitiesKHR(device, self.surface);
@@ -1372,8 +1273,7 @@ pub const VulkanBackend = struct
         var format_count: u32 = undefined;
         _ = try self.vki.getPhysicalDeviceSurfaceFormatsKHR(device, self.surface, &format_count, null);
 
-        if (format_count != 0)
-        {
+        if (format_count != 0) {
             details.formats = try details.allocator.alloc(vk.SurfaceFormatKHR, format_count);
             _ = try self.vki.getPhysicalDeviceSurfaceFormatsKHR(device, self.surface, &format_count, details.formats.?.ptr);
         }
@@ -1381,8 +1281,7 @@ pub const VulkanBackend = struct
         var present_mode_count: u32 = undefined;
         _ = try self.vki.getPhysicalDeviceSurfacePresentModesKHR(device, self.surface, &present_mode_count, null);
 
-        if (present_mode_count != 0)
-        {
+        if (present_mode_count != 0) {
             details.present_modes = try details.allocator.alloc(vk.PresentModeKHR, present_mode_count);
             _ = try self.vki.getPhysicalDeviceSurfacePresentModesKHR(device, self.surface, &present_mode_count, details.present_modes.?.ptr);
         }
@@ -1390,15 +1289,13 @@ pub const VulkanBackend = struct
         return details;
     }
 
-    fn is_device_suitable(self: *VulkanBackend, device: vk.PhysicalDevice) !bool
-    {
+    fn is_device_suitable(self: *VulkanBackend, device: vk.PhysicalDevice) !bool {
         const indices = try self.find_queue_families(device);
 
         const extensions_supported = try self.check_device_extension_support(device);
 
         var swap_chain_adequate = false;
-        if (extensions_supported)
-        {
+        if (extensions_supported) {
             const swap_chain_support = try self.query_swap_chain_support(device);
             defer swap_chain_support.deinit();
 
@@ -1410,8 +1307,7 @@ pub const VulkanBackend = struct
         return indices.isComplete() and extensions_supported and swap_chain_adequate and supported_features.sampler_anisotropy == vk.TRUE;
     }
 
-    fn check_device_extension_support(self: *VulkanBackend, device: vk.PhysicalDevice) !bool
-    {
+    fn check_device_extension_support(self: *VulkanBackend, device: vk.PhysicalDevice) !bool {
         var extension_count: u32 = undefined;
         _ = try self.vki.enumerateDeviceExtensionProperties(device, null, &extension_count, null);
 
@@ -1421,17 +1317,15 @@ pub const VulkanBackend = struct
 
         const required_extensions = device_extensions[0..];
 
-        for (required_extensions) |required_extension|
-        {
-            for (available_extensions) |available_extension|
-            {
+        for (required_extensions) |required_extension| {
+            for (available_extensions) |available_extension| {
                 const len = std.mem.indexOfScalar(u8, &available_extension.extension_name, 0).?;
                 const available_extension_name = available_extension.extension_name[0..len];
-                if (std.mem.eql(u8, std.mem.span(required_extension), available_extension_name))
+                if (std.mem.eql(u8, std.mem.span(required_extension), available_extension_name)) {
                     break;
+                }
             }
-            else
-            {
+            else {
                 return false;
             }
         }
@@ -1439,8 +1333,7 @@ pub const VulkanBackend = struct
         return true;
     }
 
-    fn find_queue_families(self: *VulkanBackend, device: vk.PhysicalDevice) !QueueFamilyIndices
-    {
+    fn find_queue_families(self: *VulkanBackend, device: vk.PhysicalDevice) !QueueFamilyIndices {
         var indices: QueueFamilyIndices = .{};
 
         var queue_family_count: u32 = 0;
@@ -1450,36 +1343,31 @@ pub const VulkanBackend = struct
         defer self.allocator.free(queue_families);
         self.vki.getPhysicalDeviceQueueFamilyProperties(device, &queue_family_count, queue_families.ptr);
 
-        for (queue_families, 0..) |queue_family, i|
-        {
-            if (indices.graphics_family == null and queue_family.queue_flags.graphics_bit)
-            {
+        for (queue_families, 0..) |queue_family, i| {
+            if (indices.graphics_family == null and queue_family.queue_flags.graphics_bit) {
                 indices.graphics_family = @intCast(i);
-            }
-            else if (indices.present_family == null and (try self.vki.getPhysicalDeviceSurfaceSupportKHR(device, @intCast(i), self.surface)) == vk.TRUE)
-            {
+            } else if (indices.present_family == null and (try self.vki.getPhysicalDeviceSurfaceSupportKHR(device, @intCast(i), self.surface)) == vk.TRUE) {
                 indices.present_family = @intCast(i);
             }
 
-            if (indices.isComplete()) break;
+            if (indices.isComplete()) { break; }
         }
 
         return indices;
     }
 
-    fn get_required_extensions(allocator: Allocator) !std.ArrayListAligned([*:0]const u8, null)
-    {
+    fn get_required_extensions(allocator: Allocator) !std.ArrayListAligned([*:0]const u8, null) {
         var extensions = std.ArrayList([*:0]const u8).init(allocator);
         try extensions.appendSlice(GlfwWindow.get_required_instance_extensions() orelse @panic("failed to get extensions"));
 
-        if (CFG.enable_validation_layers)
+        if (CFG.enable_validation_layers) {
             try extensions.append(vk.extension_info.ext_debug_utils.name);
+        }
 
         return extensions;
     }
 
-    fn check_validation_layer_support(self: *VulkanBackend) !bool
-    {
+    fn check_validation_layer_support(self: *VulkanBackend) !bool {
         var layer_count: u32 = undefined;
         _ = try self.vkb.enumerateInstanceLayerProperties(&layer_count, null);
 
@@ -1487,45 +1375,33 @@ pub const VulkanBackend = struct
         defer self.allocator.free(available_layers);
         _ = try self.vkb.enumerateInstanceLayerProperties(&layer_count, available_layers.ptr);
 
-        for (validation_layers) |layer_name|
-        {
+        for (validation_layers) |layer_name| {
             var layer_found: bool = false;
 
-            for (available_layers) |layer_properties|
-            {
+            for (available_layers) |layer_properties| {
                 const available_len = std.mem.indexOfScalar(u8, &layer_properties.layer_name, 0).?;
                 const available_layer_name = layer_properties.layer_name[0..available_len];
-                if (std.mem.eql(u8, std.mem.span(layer_name), available_layer_name))
-                {
+                if (std.mem.eql(u8, std.mem.span(layer_name), available_layer_name)) {
                     layer_found = true;
                     break;
                 }
             }
 
-            if (!layer_found) return false;
+            if (!layer_found) { return false; }
         }
 
         return true;
     }
 
-    fn debug_callback(severity: vk.DebugUtilsMessageSeverityFlagsEXT, _: vk.DebugUtilsMessageTypeFlagsEXT, p_callback_data: ?*const vk.DebugUtilsMessengerCallbackDataEXT, _: ?*anyopaque) callconv(vk.vulkan_call_conv) vk.Bool32
-    {
-        if (p_callback_data != null)
-        {
-            if (severity.verbose_bit_ext)
-            {
+    fn debug_callback(severity: vk.DebugUtilsMessageSeverityFlagsEXT, _: vk.DebugUtilsMessageTypeFlagsEXT, p_callback_data: ?*const vk.DebugUtilsMessengerCallbackDataEXT, _: ?*anyopaque) callconv(vk.vulkan_call_conv) vk.Bool32 {
+        if (p_callback_data != null) {
+            if (severity.verbose_bit_ext) {
                 Logger.debug("DBG-CB: {s}\n", .{p_callback_data.?.p_message});
-            }
-            else if (severity.info_bit_ext)
-            {
+            } else if (severity.info_bit_ext) {
                 Logger.info("DBG-CB: {s}\n", .{p_callback_data.?.p_message});
-            }
-            else if (severity.warning_bit_ext)
-            {
+            } else if (severity.warning_bit_ext) {
                 Logger.warn("DBG-CB: {s}\n", .{p_callback_data.?.p_message});
-            }
-            else
-            {
+            } else {
                 Logger.err("DBG-CB: {s}\n", .{p_callback_data.?.p_message});
                 @panic("render-error occurred");
             }
@@ -1551,8 +1427,7 @@ pub const VulkanBackend = struct
         const frag_shader_module: vk.ShaderModule = try self.create_shader_module(&resources.frag_27);
         defer self.vkd.destroyShaderModule(self.device, frag_shader_module, null);
 
-        const shader_stages = [_]vk.PipelineShaderStageCreateInfo
-        {
+        const shader_stages = [_]vk.PipelineShaderStageCreateInfo {
             .{
                 .flags = .{},
                 .stage = .{ .vertex_bit = true },
@@ -1572,8 +1447,7 @@ pub const VulkanBackend = struct
         // TODO(lm): don't hardcode
         const binding_description = Vertex.get_binding_description();
 
-        const vertex_input_info = vk.PipelineVertexInputStateCreateInfo
-        {
+        const vertex_input_info = vk.PipelineVertexInputStateCreateInfo {
             .flags = .{},
             .vertex_binding_description_count   = 1,
             .p_vertex_binding_descriptions      = @ptrCast(&binding_description),
@@ -1581,15 +1455,13 @@ pub const VulkanBackend = struct
             .p_vertex_attribute_descriptions    = @ptrCast(attribute_descriptions),
         };
 
-        const input_assembly = vk.PipelineInputAssemblyStateCreateInfo
-        {
+        const input_assembly = vk.PipelineInputAssemblyStateCreateInfo {
             .flags = .{},
             .topology = .triangle_list,
             .primitive_restart_enable = vk.FALSE,
         };
 
-        const viewport_state = vk.PipelineViewportStateCreateInfo
-        {
+        const viewport_state = vk.PipelineViewportStateCreateInfo {
             .flags = .{},
             .viewport_count = 1,
             .p_viewports = undefined,
@@ -1597,8 +1469,7 @@ pub const VulkanBackend = struct
             .p_scissors = undefined,
         };
 
-        const rasterizer = vk.PipelineRasterizationStateCreateInfo
-        {
+        const rasterizer = vk.PipelineRasterizationStateCreateInfo {
             .flags = .{},
             .depth_clamp_enable = vk.FALSE,
             .rasterizer_discard_enable = vk.FALSE,
@@ -1613,8 +1484,7 @@ pub const VulkanBackend = struct
             .line_width = 1,
         };
 
-        const multisampling = vk.PipelineMultisampleStateCreateInfo
-        {
+        const multisampling = vk.PipelineMultisampleStateCreateInfo {
             .flags = .{},
             .rasterization_samples = .{ .@"1_bit" = true },
             .sample_shading_enable = vk.FALSE,
@@ -1624,8 +1494,7 @@ pub const VulkanBackend = struct
             .alpha_to_one_enable = vk.FALSE,
         };
 
-        const depth_stencil = vk.PipelineDepthStencilStateCreateInfo
-        {
+        const depth_stencil = vk.PipelineDepthStencilStateCreateInfo {
             .flags = .{},
             .depth_test_enable = vk.TRUE,
             .depth_write_enable = vk.TRUE,
@@ -1638,8 +1507,7 @@ pub const VulkanBackend = struct
             .max_depth_bounds = 1,
         };
 
-        const color_blend_attachment = [_]vk.PipelineColorBlendAttachmentState
-        {
+        const color_blend_attachment = [_]vk.PipelineColorBlendAttachmentState {
             .{
                 .blend_enable = vk.FALSE,
                 .src_color_blend_factor = .one,
@@ -1652,8 +1520,7 @@ pub const VulkanBackend = struct
             }
         };
 
-        const color_blending = vk.PipelineColorBlendStateCreateInfo
-        {
+        const color_blending = vk.PipelineColorBlendStateCreateInfo {
             .flags = .{},
             .logic_op_enable = vk.FALSE,
             .logic_op = .copy,
@@ -1663,28 +1530,24 @@ pub const VulkanBackend = struct
         };
         const dynamic_states = [_]vk.DynamicState{ .viewport, .scissor };
 
-        const dynamic_state = vk.PipelineDynamicStateCreateInfo
-        {
+        const dynamic_state = vk.PipelineDynamicStateCreateInfo {
             .flags = .{},
             .dynamic_state_count = dynamic_states.len,
             .p_dynamic_states = &dynamic_states,
         };
 
         var push_constant_ranges = PushConstantRangeStack{};
-        for (push_constant_internals) |pci|
-        {
-            push_constant_ranges.push(vk.PushConstantRange
-                {
-                    .offset = @intCast(pci.range.offset),
-                    .size   = @intCast(pci.range.size),
-                    // TODO(lm): make selectable
-                    .stage_flags = .{
-                        // .all_graphics = true,   // NOTE(lm): not working *shrug*
-                        .vertex_bit = true,
-                        .fragment_bit = true,
-                    },
-                }
-            );
+        for (push_constant_internals) |pci| {
+            push_constant_ranges.push(vk.PushConstantRange {
+                .offset = @intCast(pci.range.offset),
+                .size   = @intCast(pci.range.size),
+                // TODO(lm): make selectable
+                .stage_flags = .{
+                    // .all_graphics = true,   // NOTE(lm): not working *shrug*
+                    .vertex_bit = true,
+                    .fragment_bit = true,
+                },
+            });
         }
 
         const pipeline_layout = try self.vkd.createPipelineLayout(
@@ -1699,8 +1562,7 @@ pub const VulkanBackend = struct
             null
         );
 
-        const pipeline_info = [_]vk.GraphicsPipelineCreateInfo
-        {
+        const pipeline_info = [_]vk.GraphicsPipelineCreateInfo {
             .{
                 .flags = .{},
                 .stage_count = shader_stages.len,
@@ -1732,16 +1594,14 @@ pub const VulkanBackend = struct
             @ptrCast(&pipeline),
         );
 
-        return GraphicsPipeline
-        {
+        return GraphicsPipeline {
             .render_pass = render_pass,
             .pipeline = pipeline,
             .pipeline_layout = pipeline_layout,
         };
     }
 
-    fn destroy_graphics_pipeline(self: *VulkanBackend, pipeline: *GraphicsPipeline) void
-    {
+    fn destroy_graphics_pipeline(self: *VulkanBackend, pipeline: *GraphicsPipeline) void {
         Logger.debug("destroy graphics-pipeline\n", .{});
 
         self.vkd.destroyPipeline(self.device, pipeline.pipeline, null);
@@ -1751,8 +1611,7 @@ pub const VulkanBackend = struct
 
     // ------------------------------------------
 
-    pub fn create_shader_internals(self: *VulkanBackend, info: *const ShaderInfo, internals: *ShaderInternals) !void
-    {
+    pub fn create_shader_internals(self: *VulkanBackend, info: *const ShaderInfo, internals: *ShaderInternals) !void {
         Logger.debug("creating shader-program\n", .{});
 
         // TODO(lm):
@@ -1762,8 +1621,7 @@ pub const VulkanBackend = struct
         {
             var attr_stride: usize = 0;
 
-            for (info.attributes.as_slice()) |attr|
-            {
+            for (info.attributes.as_slice()) |attr| {
                 internals.attributes.push(.{
                     .binding  = @intCast(attr.binding),
                     .location = @intCast(attr.location),
@@ -1778,8 +1636,7 @@ pub const VulkanBackend = struct
         // create uniform-buffer
         // TODO(lm): compress uniform- and storage-buffer creation
         {
-            for (UNIFORM_SCOPES) |scopes|
-            {
+            for (UNIFORM_SCOPES) |scopes| {
                 const scope_idx = @intFromEnum(scopes);
 
                 const scope_info = info.scopes[scope_idx];
@@ -1787,14 +1644,12 @@ pub const VulkanBackend = struct
                 scope_internals.buffer_offset = internals.uniform_buffer_total_size_aligned;
                 scope_internals.buffer_descriptor_type = .uniform_buffer;
 
-                for (scope_info.buffers.as_slice()) |buff|
-                {
+                for (scope_info.buffers.as_slice()) |buff| {
                     scope_internals.buffer_instance_size_unalinged += buff.size;
                 }
 
                 // align buffer-instance-size
-                while (scope_internals.buffer_instance_size_alinged < scope_internals.buffer_instance_size_unalinged)
-                {
+                while (scope_internals.buffer_instance_size_alinged < scope_internals.buffer_instance_size_unalinged) {
                     scope_internals.buffer_instance_size_alinged += CFG.vulkan_ubo_alignment;
                 }
 
@@ -1803,8 +1658,7 @@ pub const VulkanBackend = struct
 
             Logger.debug("total uniform-buffer size: {} byte\n", .{internals.uniform_buffer_total_size_aligned});
 
-            if (internals.uniform_buffer_total_size_aligned > 0)
-            {
+            if (internals.uniform_buffer_total_size_aligned > 0) {
                 const buffer_h                   = try self.create_uniform_buffer(internals.uniform_buffer_total_size_aligned);
                 internals.uniform_buffer         = self.get_buffer(buffer_h);
                 internals.uniform_buffer_mapping = @as([*]u8, @ptrCast(
@@ -1815,8 +1669,7 @@ pub const VulkanBackend = struct
 
         // create storage-buffer
         {
-            for (STORAGE_SCOPES) |scope|
-            {
+            for (STORAGE_SCOPES) |scope| {
                 const scope_idx     = @intFromEnum(scope);
                 const scope_info    = info.scopes[scope_idx];
                 var scope_internals = &internals.scopes[scope_idx];
@@ -1824,14 +1677,12 @@ pub const VulkanBackend = struct
                 scope_internals.buffer_offset = internals.storage_buffer_total_size_aligned;
                 scope_internals.buffer_descriptor_type = .storage_buffer;
 
-                for (scope_info.buffers.as_slice()) |buff|
-                {
+                for (scope_info.buffers.as_slice()) |buff| {
                     scope_internals.buffer_instance_size_unalinged += buff.size;
                 }
 
                 // align buffer-instance-size
-                while (scope_internals.buffer_instance_size_alinged < scope_internals.buffer_instance_size_unalinged)
-                {
+                while (scope_internals.buffer_instance_size_alinged < scope_internals.buffer_instance_size_unalinged) {
                     scope_internals.buffer_instance_size_alinged += CFG.vulkan_ubo_alignment;
                 }
 
@@ -1842,8 +1693,7 @@ pub const VulkanBackend = struct
             Logger.debug("total storage-buffer size: {} byte\n", .{internals.storage_buffer_total_size_aligned});
 
             // TODO(lm): consider making 'storage_buffer' nullable
-            if (internals.storage_buffer_total_size_aligned > 0)
-            {
+            if (internals.storage_buffer_total_size_aligned > 0) {
                 const buffer_h = try self.create_storage_buffer(internals.storage_buffer_total_size_aligned);
                 internals.storage_buffer = self.get_buffer(buffer_h);
                 internals.storage_buffer_mapping = @as([*]u8, @ptrCast(
@@ -1856,18 +1706,15 @@ pub const VulkanBackend = struct
         {
             internals.descriptor_pool = try self.create_descriptor_pool();
 
-            for (info.scopes, 0..) |scope_info, idx|
-            {
+            for (info.scopes, 0..) |scope_info, idx| {
                 // create layout
                 // -------------
                 var bindings = DescriptorSetLayoutBindingStack{};
                 var scope_internals = &internals.scopes[idx];
 
-                if (!scope_info.buffers.is_empty())
-                {
+                if (!scope_info.buffers.is_empty()) {
                     // @Todo: make configurable
-                    if (idx != @intFromEnum(ShaderScope.scene) and idx != @intFromEnum(ShaderScope.object))
-                    {
+                    if (idx != @intFromEnum(ShaderScope.scene) and idx != @intFromEnum(ShaderScope.object)) {
                         Logger.debug("add uniform-buffer to scope {} at binding {}\n", .{idx, BUFFER_BINDING_IDX});
 
                         // use uniform-buffers for non-object scopes
@@ -1878,42 +1725,34 @@ pub const VulkanBackend = struct
                             .p_immutable_samplers = null,
                             .stage_flags = .{ .vertex_bit = true, .fragment_bit = true },
                         });
-                    }
-                    else
-                    {
+                    } else {
                         Logger.debug("add storage-buffer to scope {} at binding {}\n", .{idx, BUFFER_BINDING_IDX});
 
                         // use storage-buffers for object scope
-                        bindings.push(
-                            .{
-                                .binding = BUFFER_BINDING_IDX,
-                                .descriptor_count = 1,
-                                .descriptor_type = .storage_buffer,
-                                .p_immutable_samplers = null,
-                                .stage_flags = .{ .vertex_bit = true, .fragment_bit = true },
-                            }
-                        );
+                        bindings.push(.{
+                            .binding = BUFFER_BINDING_IDX,
+                            .descriptor_count = 1,
+                            .descriptor_type = .storage_buffer,
+                            .p_immutable_samplers = null,
+                            .stage_flags = .{ .vertex_bit = true, .fragment_bit = true },
+                        });
                     }
                 }
 
-                if (!scope_info.samplers.is_empty())
-                {
+                if (!scope_info.samplers.is_empty()) {
                     Logger.debug("add sampler-layout to scope {} at binding {} with {} samplers\n", .{idx, IMAGE_SAMPLER_BINDING_IDX, scope_info.samplers.len});
-                    bindings.push(
-                        .{
-                            .binding = IMAGE_SAMPLER_BINDING_IDX,
-                            .descriptor_count = @as(u32, @intCast(scope_info.samplers.len)),
-                            .descriptor_type = .combined_image_sampler,
-                            .p_immutable_samplers = null,
-                            .stage_flags = .{ .fragment_bit = true },
-                        }
-                    );
+                    bindings.push(.{
+                        .binding = IMAGE_SAMPLER_BINDING_IDX,
+                        .descriptor_count = @as(u32, @intCast(scope_info.samplers.len)),
+                        .descriptor_type = .combined_image_sampler,
+                        .p_immutable_samplers = null,
+                        .stage_flags = .{ .fragment_bit = true },
+                    });
                 }
 
                 // NOTE(lm): when there are no bindings, we are still creating an empty set, so that we don't have to use dynamic set indices
                 //           -> set 0 is always 'global', set 3 is always 'object'
-                const layout_info = vk.DescriptorSetLayoutCreateInfo
-                {
+                const layout_info = vk.DescriptorSetLayoutCreateInfo {
                     .flags         = .{},
                     .binding_count = @as(u32, @intCast(bindings.len)),
                     .p_bindings    = if (bindings.is_empty()) null else &bindings.items_raw,
@@ -1925,28 +1764,23 @@ pub const VulkanBackend = struct
 
         // add push constants
         {
-            for (PUSH_CONSTANT_SCOPES) |scope|
-            {
+            for (PUSH_CONSTANT_SCOPES) |scope| {
                 const scope_idx  = @intFromEnum(scope);
                 const scope_info = &info.scopes[scope_idx];
 
-                for (scope_info.buffers.as_slice()) |scope_buffer|
-                {
+                for (scope_info.buffers.as_slice()) |scope_buffer| {
                     Logger.debug("add push constant '{s}' with size '{}' to scope '{}'\n", .{scope_buffer.name.as_slice(), scope_buffer.size, scope});
 
                     const range = engine.utils.get_aligned_range(0, scope_buffer.size, CFG.vulkan_push_constant_alignment);
-                    internals.push_constant_internals.push(
-                        .{
-                            .range = range,
-                        }
-                    );
+                    internals.push_constant_internals.push(.{
+                        .range = range,
+                    });
                 }
             }
         }
 
         var all_layouts: [4]vk.DescriptorSetLayout = undefined;
-        inline for (0..4) |idx|
-        {
+        inline for (0..4) |idx| {
             all_layouts[idx] = internals.scopes[idx].descriptor_set_layout;
         }
 
@@ -1954,20 +1788,22 @@ pub const VulkanBackend = struct
             self.render_pass,
             all_layouts[0..],
             internals.attributes.as_slice(),
-            internals.push_constant_internals.as_slice());
+            internals.push_constant_internals.as_slice()
+        );
     }
 
-    pub fn destroy_shader_internals(self: *VulkanBackend, internals: *ShaderInternals) void
-    {
+    pub fn destroy_shader_internals(self: *VulkanBackend, internals: *ShaderInternals) void {
         Logger.debug("destroying shader-internals\n", .{});
 
-        for (internals.scopes) |scope|
-        {
-            if (scope.descriptor_set_layout != .null_handle)
+        for (internals.scopes) |scope| {
+            if (scope.descriptor_set_layout != .null_handle) {
                 self.vkd.destroyDescriptorSetLayout(self.device, scope.descriptor_set_layout, null);
+            }
         }
 
-        if (internals.descriptor_pool != .null_handle) self.vkd.destroyDescriptorPool(self.device, internals.descriptor_pool, null);
+        if (internals.descriptor_pool != .null_handle) {
+            self.vkd.destroyDescriptorPool(self.device, internals.descriptor_pool, null);
+        }
 
         // cleanup uniform buffer
         self.vkd.unmapMemory(self.device, internals.uniform_buffer.mem);
@@ -1982,14 +1818,12 @@ pub const VulkanBackend = struct
         self.destroy_graphics_pipeline(&internals.pipeline);
     }
 
-    pub fn get_shader_internals(self: *VulkanBackend, internals_h: ResourceHandle) *ShaderInternals
-    {
+    pub fn get_shader_internals(self: *VulkanBackend, internals_h: ResourceHandle) *ShaderInternals {
         return self.internals.get_mut(internals_h.value).*;
     }
 
     // TODO(lm): use actuall instance-idx
-    fn update_shader_uniform_buffer(self: *VulkanBackend, info: *const ShaderInfo, internals: *ShaderInternals) !void
-    {
+    fn update_shader_uniform_buffer(self: *VulkanBackend, info: *const ShaderInfo, internals: *ShaderInternals) !void {
         const start_time: f32 = @floatFromInt((try std.time.Instant.now()).since(self.start_time));
         const ns_per_s: f32 = @floatFromInt(std.time.ns_per_s);
         const time: f32 = start_time / ns_per_s;
@@ -2003,12 +1837,12 @@ pub const VulkanBackend = struct
                 45.0,
                 @as(f32, @floatFromInt(self.swap_chain_extent.width)) / @as(f32, @floatFromInt(self.swap_chain_extent.height)),
                 near_distance,
-                far_distance),
+                far_distance
+            ),
         };
         global_data.proj.data[1][1] *= -1;
 
-        var scene_data = engine.render.SceneShaderData
-        {
+        var scene_data = engine.render.SceneShaderData {
             .model = za.Mat4.identity().rotate(time * 90.0, za.Vec3.new(0.0, 0.0, 1.0)),
         };
 
@@ -2033,8 +1867,7 @@ pub const VulkanBackend = struct
     }
 
     // TODO(lm): think about what happens when this function is used at local scope
-    pub fn shader_acquire_instance_resources(self: *const VulkanBackend, info: *const ShaderInfo, internals: *ShaderInternals, scope: ShaderScope, default_image: ResourceHandle) !ResourceHandle
-    {
+    pub fn shader_acquire_instance_resources(self: *const VulkanBackend, info: *const ShaderInfo, internals: *ShaderInternals, scope: ShaderScope, default_image: ResourceHandle) !ResourceHandle {
         const scope_info    = &info.scopes[@intFromEnum(scope)];
         var scope_internals = &internals.scopes[@intFromEnum(scope)];
 
@@ -2044,16 +1877,14 @@ pub const VulkanBackend = struct
         var instance_internals = scope_internals.instances.get_mut(scope_internals.instances.len - 1);
 
         // set all textures to the default texture
-        for (0..scope_info.samplers.len) |idx|
-        {
+        for (0..scope_info.samplers.len) |idx| {
             instance_internals.sampler_images[idx] = default_image;
         }
 
         // allocate descriptor-sets for this instance
         const layouts: [CFG.MAX_FRAMES_IN_FLIGHT]vk.DescriptorSetLayout = [_]vk.DescriptorSetLayout { scope_internals.descriptor_set_layout } ** CFG.MAX_FRAMES_IN_FLIGHT;
 
-        const alloc_info = vk.DescriptorSetAllocateInfo
-        {
+        const alloc_info = vk.DescriptorSetAllocateInfo {
             .descriptor_pool = internals.descriptor_pool,
             .descriptor_set_count = CFG.MAX_FRAMES_IN_FLIGHT,
             .p_set_layouts = &layouts,
@@ -2064,8 +1895,7 @@ pub const VulkanBackend = struct
         return ResourceHandle { .value = scope_internals.instances.len - 1 };
     }
 
-    pub fn shader_bind_scope(_: *VulkanBackend, internals: *ShaderInternals, scope: ShaderScope, instance_h: ResourceHandle) void
-    {
+    pub fn shader_bind_scope(_: *VulkanBackend, internals: *ShaderInternals, scope: ShaderScope, instance_h: ResourceHandle) void {
         internals.bound_scope = scope;
         internals.bound_instance_h = instance_h;
     }
@@ -2083,8 +1913,7 @@ pub const VulkanBackend = struct
     }
 
     /// scope and instance must be set before calling this function
-    pub fn shader_set_uniform_sampler(_: *const VulkanBackend, internals: *ShaderInternals, images_h: []const ResourceHandle) void
-    {
+    pub fn shader_set_uniform_sampler(_: *const VulkanBackend, internals: *ShaderInternals, images_h: []const ResourceHandle) void {
         Logger.debug("set uniform sampler at scope {} and instance {} with {} images\n", .{internals.bound_scope, internals.bound_instance_h, images_h.len});
 
         // TODO(lm): validate dynamic length
@@ -2093,8 +1922,7 @@ pub const VulkanBackend = struct
         const scope_internals    = &internals.scopes[@intFromEnum(internals.bound_scope)];
         const instance_internals = scope_internals.instances.get_mut(internals.bound_instance_h.value);
 
-        for (images_h, 0..) |image_h, idx|
-        {
+        for (images_h, 0..) |image_h, idx| {
             instance_internals.sampler_images[idx] = image_h;
         }
     }
@@ -2120,11 +1948,11 @@ pub const VulkanBackend = struct
         );
     }
 
-    pub fn shader_apply_material(self: *VulkanBackend, program: *ShaderProgram, material: *Material, curr_frame: FrameNumber) !void
-    {
+    pub fn shader_apply_material(self: *VulkanBackend, program: *ShaderProgram, material: *Material, curr_frame: FrameNumber) !void {
         const update_needed = curr_frame != material.frame_updated_at;
-        if (update_needed)
+        if (update_needed) {
             material.frame_updated_at = curr_frame;
+        }
         try self.shader_apply_uniform_scope(.material, material.internals.instance_h, &program.info, &program.internals, update_needed);
     }
 
@@ -2144,20 +1972,16 @@ pub const VulkanBackend = struct
         const descriptor_set     = instance_internals.descriptor_sets[self.frame_in_flight_idx];
 
         // only update once per frame
-        if (update_needed)
-        {
+        if (update_needed) {
             var buffer: *const Buffer = undefined;
             var range: usize = undefined;
 
-            switch (scope_internals.buffer_descriptor_type)
-            {
-                .uniform_buffer =>
-                {
+            switch (scope_internals.buffer_descriptor_type) {
+                .uniform_buffer => {
                     buffer = &internals.uniform_buffer;
                     range = scope_internals.buffer_instance_size_alinged;
                 },
-                .storage_buffer =>
-                {
+                .storage_buffer => {
                     buffer = &internals.storage_buffer;
                     // TODO(lm): only update bytes that are actually used
                     range = internals.storage_buffer_total_size_aligned;
@@ -2174,55 +1998,46 @@ pub const VulkanBackend = struct
             }};
 
             var image_info = DescriptorImageInfoStack {};
-            for (scope_info.samplers.as_slice(), 0..) |_, idx|
-            {
+            for (scope_info.samplers.as_slice(), 0..) |_, idx| {
                 const sampler_image_h = instance_internals.sampler_images[idx];
                 assert(sampler_image_h.is_valid());
                 const sampler_image = self.get_image(sampler_image_h);
 
-                image_info.push(
-                    .{
-                        .image_layout = .shader_read_only_optimal,
-                        .image_view = sampler_image.view,
-                        .sampler = sampler_image.sampler.?, // TODO (lm): don't unwrap
-                    }
-                );
+                image_info.push(.{
+                    .image_layout = .shader_read_only_optimal,
+                    .image_view = sampler_image.view,
+                    .sampler = sampler_image.sampler.?, // TODO (lm): don't unwrap
+                });
             }
 
             // update descriptor sets
-        {
+            {
                 var descriptor_writes = StackArray(vk.WriteDescriptorSet, 2){};
 
-                if (!scope_info.buffers.is_empty())
-                {
-                    descriptor_writes.push(
-                        .{
-                            .dst_set = descriptor_set,
-                            .dst_binding = 0,
-                            .dst_array_element = 0,
-                            .descriptor_type = scope_internals.buffer_descriptor_type,
-                            .descriptor_count = 1,
-                            .p_buffer_info = &buffer_info,
-                            .p_image_info = undefined,
-                            .p_texel_buffer_view = undefined,
-                        }
-                    );
+                if (!scope_info.buffers.is_empty()) {
+                    descriptor_writes.push(.{
+                        .dst_set = descriptor_set,
+                        .dst_binding = 0,
+                        .dst_array_element = 0,
+                        .descriptor_type = scope_internals.buffer_descriptor_type,
+                        .descriptor_count = 1,
+                        .p_buffer_info = &buffer_info,
+                        .p_image_info = undefined,
+                        .p_texel_buffer_view = undefined,
+                    });
                 }
 
-                if (!image_info.is_empty())
-                {
-                    descriptor_writes.push(
-                        .{
-                            .dst_set = descriptor_set,
-                            .dst_binding = 1,
-                            .dst_array_element = 0,
-                            .descriptor_type = .combined_image_sampler,
-                            .descriptor_count = 1,
-                            .p_buffer_info = undefined,
-                            .p_image_info = &image_info.items_raw,
-                            .p_texel_buffer_view = undefined,
-                        }
-                    );
+                if (!image_info.is_empty()) {
+                    descriptor_writes.push(.{
+                        .dst_set = descriptor_set,
+                        .dst_binding = 1,
+                        .dst_array_element = 0,
+                        .descriptor_type = .combined_image_sampler,
+                        .descriptor_count = 1,
+                        .p_buffer_info = undefined,
+                        .p_image_info = &image_info.items_raw,
+                        .p_texel_buffer_view = undefined,
+                    });
                 }
 
                 // update descriptor set
@@ -2248,8 +2063,7 @@ pub const VulkanBackend = struct
         }
     }
 
-    fn shader_set_object_idx(self: *const VulkanBackend, internals: *ShaderInternals, value: usize) void
-    {
+    fn shader_set_object_idx(self: *const VulkanBackend, internals: *ShaderInternals, value: usize) void {
         const command_buffer = self.command_buffers.?[self.frame_in_flight_idx];
         // TODO(lm): don't hard-code index
         const push_constant = internals.push_constant_internals.get(0);
@@ -2266,8 +2080,7 @@ pub const VulkanBackend = struct
 
     // ------------------------------------------
 
-    pub fn create_material_internals(self: *VulkanBackend, program: *ShaderProgram, material: *Material, default_material: ResourceHandle) !void
-    {
+    pub fn create_material_internals(self: *VulkanBackend, program: *ShaderProgram, material: *Material, default_material: ResourceHandle) !void {
         const instance_h = try self.shader_acquire_instance_resources(
             &program.info,
             &program.internals,
@@ -2275,29 +2088,25 @@ pub const VulkanBackend = struct
             default_material
         );
 
-        material.internals = MaterialInternals
-        {
+        material.internals = MaterialInternals {
             .instance_h = instance_h
         };
     }
 
     // @Todo: implement
-    pub fn destroy_material_internals(self: *VulkanBackend, material: *Material) void
-    {
+    pub fn destroy_material_internals(self: *VulkanBackend, material: *Material) void {
         _ = self;
         material.internals = undefined;
     }
 
     // ------------------------------------------
 
-    pub fn create_geometry_internals(self: *VulkanBackend, config: *const GeometryConfig, internals: *GeometryInternals) !void
-    {
+    pub fn create_geometry_internals(self: *VulkanBackend, config: *const GeometryConfig, internals: *GeometryInternals) !void {
         internals.vertex_buffer_h = try self.create_vertex_buffer(config.vertices[0..]);
         internals.index_buffer_h  = try self.create_index_buffer (config.indices[0..]);
     }
 
-    pub fn destroy_geometry_internals(self: *VulkanBackend, geometry: *Geometry) void
-    {
+    pub fn destroy_geometry_internals(self: *VulkanBackend, geometry: *Geometry) void {
         self.free_buffer_h(geometry.internals.vertex_buffer_h);
         self.free_buffer_h(geometry.internals.index_buffer_h);
         geometry.internals = undefined;
@@ -2308,10 +2117,8 @@ pub const VulkanBackend = struct
 
 
 
-pub fn to_vk_index_type(comptime T: type) vk.IndexType
-{
-    switch (T)
-    {
+pub fn to_vk_index_type(comptime T: type) vk.IndexType {
+    switch (T) {
         u8   => return .uint8,
         u16  => return .uint16,
         u32  => return .uint32,
