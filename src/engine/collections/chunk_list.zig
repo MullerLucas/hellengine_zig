@@ -95,27 +95,40 @@ test "basic_usage" {
     var list = ChunkList(Foo, 32).init(testing.allocator);
     defer list.deinit();
 
-
     for (0..20) |i| {
         try list.append(.{
             .a = i
         });
     }
 
-    for (list.chunks.items, 0..) |c, i| {
-        std.debug.print("Chunk: {d}\n", .{i});
+    {
+        var collector_1 = std.ArrayList(usize).init(testing.allocator);
+        defer collector_1.deinit();
 
-        for (c.items(.a)) |s| {
-            std.debug.print("\tData: {d}\n", .{s});
+        var collector_2 = std.ArrayList(usize).init(testing.allocator);
+        defer collector_2.deinit();
+
+        for (list.chunks.items, 0..) |c, i| {
+            try collector_1.append(i);
+
+            for (c.items(.a)) |s| {
+                try collector_2.append(s);
+            }
         }
+
+        try testing.expectEqualSlices(usize, collector_1.items, &[_]usize{0, 1, 2, 3, 4});
+        try testing.expectEqualSlices(usize, collector_2.items, &[_]usize{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19});
     }
 
-    std.debug.print("-------------------\n", .{});
+    {
+        var collector = std.ArrayList(usize).init(testing.allocator);
+        defer collector.deinit();
 
-    var iter = ChunkList(Foo, 32).ChunkListIterator(.a).init(&list);
-    while (iter.next()) |data| {
-        std.debug.print("\tData: {d}\n", .{data});
+        var iter = ChunkList(Foo, 32).ChunkListIterator(.a).init(&list);
+        while (iter.next()) |data| {
+            try collector.append(data);
+        }
+
+        try testing.expectEqualSlices(usize, collector.items, &[_]usize{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19});
     }
-
-    try testing.expect(true);
 }
