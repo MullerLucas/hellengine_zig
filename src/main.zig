@@ -8,11 +8,13 @@ const GlfwWindow = engine.render.GlfwWindow;
 const TestScene  = @import("scene.zig").TestScene;
 const resources  = @import("engine/resources.zig");
 
+const corez = @import("corez");
+
 // ----------------------------------------------
 
 test {
     // std.testing.refAllDecls(@This());
-    std.testing.refAllDecls(engine.collections);
+    std.testing.refAllDecls(corez.collections);
 }
 
 // ----------------------------------------------

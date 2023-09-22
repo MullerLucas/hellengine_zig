@@ -29,7 +29,8 @@ const ObjFileParseResult         = engine.resources.obj_file.ObjFileParseResult;
 const ObjFileLoader              = engine.resources.obj_file.ObjFileLoader;
 const ObjMaterialFileParseResult = engine.resources.obj_file.ObjMaterialFileParseResult;
 
-const StackArray = engine.collections.StackArray;
+const corez      = @import("corez");
+const StackArray = corez.collections.StackArray;
 
 
 

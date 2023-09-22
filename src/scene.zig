@@ -11,7 +11,9 @@ const ShaderScope   = engine.render.shader.ShaderScope;
 
 const Logger = engine.logging.scoped(.app);
 const ResourceHandle = engine.utils.ResourceHandle;
-const StackArray = engine.collections.StackArray;
+
+const corez = @import("corez");
+const StackArray = corez.collections.StackArray;
 
 
 // ----------------------------------------------g

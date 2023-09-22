@@ -9,11 +9,12 @@ const resources = @import("resources");
 
 const CFG = engine.config;
 
-const SlotArray      = engine.collections.SlotArray;
 const ResourceHandle = engine.utils.ResourceHandle;
 const MemRange       = engine.utils.MemRange;
 
-const StackArray = engine.collections.StackArray;
+const corez      = @import("corez");
+const SlotArray  = corez.collections.SlotArray;
+const StackArray = corez.collections.StackArray;
 
 const RenderData    = engine.render.RenderData;
 const GlfwWindow    = engine.render.GlfwWindow;

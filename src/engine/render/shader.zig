@@ -4,12 +4,14 @@ const engine = @import("../../engine.zig");
 
 const ResourceHandle = engine.core.ResourceHandle;
 const Logger         = engine.logging.scoped(.render);
-const String         = engine.string.String;
 
 const NumberFormat    = engine.render.NumberFormat;
 const ShaderInternals = engine.render.vulkan.ShaderInternals;
 
-const StackArray = engine.collections.StackArray;
+const corez      = @import("corez");
+const StackArray = corez.collections.StackArray;
+const String     = corez.string.String;
+
 
 // ----------------------------------------------
 

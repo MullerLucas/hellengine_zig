@@ -8,7 +8,9 @@ const Logger             = engine.resources.Logger;
 const Vertex             = engine.resources.Vertex;
 
 const ResourceHandle = engine.core.ResourceHandle;
-const StackArray     = engine.collections.StackArray;
+
+const corez = @import("corez");
+const StackArray     = corez.collections.StackArray;
 
 /// offsets start @ 1, not 0
 pub const ObjFace = struct {

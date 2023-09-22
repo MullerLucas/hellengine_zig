@@ -14,6 +14,14 @@ pub fn build(b: *std.Build) !void {
         .optimize = optimize,
     });
 
+    // add corez
+    {
+        const corez = b.addModule("corez", .{
+            .source_file = .{ .path = "lib/corez/main.zig" }
+        });
+        exe.addModule("corez", corez);
+    }
+
     // add vulkan-zig
     {
         const vkzig_dep = b.dependency("vulkan-zig", .{

@@ -4,10 +4,12 @@ const engine = @import("../engine.zig");
 
 pub const obj_file = @import("resources/obj_file.zig");
 
-const ResourceHandle  = engine.utils.ResourceHandle;
-const SString128      = engine.string.StringS128;
+const ResourceHandle = engine.utils.ResourceHandle;
 pub const FrameNumber = engine.render.FrameNumber;
 pub const Logger      = engine.logging.scoped(.resources);
+
+const corez = @import("corez");
+const SString128 = corez.string.StringS128;
 
 // @Todo
 const backend_resources = if (true)

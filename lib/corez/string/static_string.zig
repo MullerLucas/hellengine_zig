@@ -1,7 +1,7 @@
 const std    = @import("std");
-const engine = @import("../../engine.zig");
 
-const StackArray = engine.collections.StackArray;
+const corez      = @import("../main.zig");
+const StackArray = corez.collections.StackArray;
 
 // ----------------------------------------------
 

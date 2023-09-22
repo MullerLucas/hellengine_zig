@@ -1,21 +1,10 @@
 const std = @import("std");
+const engine = @import("../engine.zig");
 
 // ----------------------------------------------------------------------------
 
-pub const ResourceHandle = struct {
-    pub const zero: ResourceHandle    = .{ .value = 0 };
-    pub const invalid: ResourceHandle = .{ .value = std.math.maxInt(usize) };
-
-    value: usize,
-
-    pub fn eql(self: ResourceHandle, other: ResourceHandle) bool {
-        return self.value == other.value;
-    }
-
-    pub fn is_valid(self: ResourceHandle) bool {
-        return self.value != invalid.value;
-    }
-};
+const corez = @import("corez");
+pub const ResourceHandle = corez.utils.UniqueHandle(@intFromEnum(engine.UniqueHandleType.ResourceHandle));
 
 // ----------------------------------------------------------------------------
 

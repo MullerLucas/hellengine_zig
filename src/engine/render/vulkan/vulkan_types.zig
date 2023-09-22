@@ -7,7 +7,9 @@ const ResourceHandle = engine.utils.ResourceHandle;
 const MemRange       = engine.utils.MemRange;
 const ShaderScope    = render.shader.ShaderScope;
 const CFG            = engine.config;
-const StackArray     = engine.collections.StackArray;
+
+const corez      = @import("corez");
+const StackArray = corez.collections.StackArray;
 
 // ----------------------------------------------
 
