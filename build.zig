@@ -17,7 +17,7 @@ pub fn build(b: *std.Build) !void {
     // add corez
     {
         const corez = b.addModule("corez", .{
-            .source_file = .{ .path = "lib/corez/main.zig" }
+            .source_file = .{ .path = "lib/corez/src/main.zig" }
         });
         exe.addModule("corez", corez);
     }

@@ -642,7 +642,7 @@ pub const VulkanBackend = struct {
 
         texture_image.view    = try self.create_image_view(texture_image.img, .r8g8b8a8_srgb, .{ .color_bit = true });
         texture_image.sampler = try self.create_texture_sampler();
-        // @Todo: this is awful
+        // TODO: this is awful
         self.set_image(texture_image_h, texture_image);
 
         texture.internals = TextureInternals {
@@ -1475,7 +1475,7 @@ pub const VulkanBackend = struct {
             .depth_clamp_enable = vk.FALSE,
             .rasterizer_discard_enable = vk.FALSE,
             .polygon_mode = .fill,
-            // @Hack: uncomment
+            // HACK: uncomment
             .cull_mode = .{}, //.{ .back_bit = true },
             .front_face = .counter_clockwise,
             .depth_bias_enable = vk.FALSE,
@@ -1714,7 +1714,7 @@ pub const VulkanBackend = struct {
                 var scope_internals = &internals.scopes[idx];
 
                 if (!scope_info.buffers.is_empty()) {
-                    // @Todo: make configurable
+                    // TODO: make configurable
                     if (idx != @intFromEnum(ShaderScope.scene) and idx != @intFromEnum(ShaderScope.object)) {
                         Logger.debug("add uniform-buffer to scope {} at binding {}\n", .{idx, BUFFER_BINDING_IDX});
 
@@ -1901,7 +1901,7 @@ pub const VulkanBackend = struct {
         internals.bound_instance_h = instance_h;
     }
 
-    // @Hack
+    // HACK:
     pub fn shader_set_material_texture_image(
         self: *VulkanBackend,
         shader_internals:   *ShaderInternals,
@@ -1909,7 +1909,7 @@ pub const VulkanBackend = struct {
         texture_internals:  *const TextureInternals,
     ) void {
         self.shader_bind_scope(shader_internals, .material, material_internals.instance_h);
-        // @Hack
+        // HACK:
         self.shader_set_uniform_sampler(shader_internals, @as([*]const ResourceHandle, @ptrCast(&texture_internals.image_h))[0..1]);
     }
 
@@ -2094,7 +2094,7 @@ pub const VulkanBackend = struct {
         };
     }
 
-    // @Todo: implement
+    // TODO: implement
     pub fn destroy_material_internals(self: *VulkanBackend, material: *Material) void {
         _ = self;
         material.internals = undefined;
