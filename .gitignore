@@ -8,3 +8,7 @@ zig-out
 deps.zig
 .zigmod
 deps.zig
+
+# editor
+.vscode
+.idea
